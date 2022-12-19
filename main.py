@@ -44,7 +44,7 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
             "This bot is only for specific channel.")
         return
     logging.info(
-        f'Received channel message from chatid: {message.chat_id} message: {pformat(update)}')
+        f'Received channel message from channel id: {message.chat_id}')
     try:
         forawrd = None
         media_ids = None
@@ -119,7 +119,6 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
             status.in_reply_to_id is None and \
             status.visibility in cfg.scope
     try:
-        logging.info(f'Received mastodon message:\n{pformat(status)}')
         if is_valid(status):
             logging.info(f'Forwarding message from mastodon to telegram.')
             txt = markdownify(status.content)

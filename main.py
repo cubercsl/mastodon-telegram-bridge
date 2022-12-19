@@ -2,7 +2,6 @@
 import json
 import logging
 import traceback
-from pprint import pformat
 from tempfile import TemporaryDirectory
 
 from markdownify import markdownify
@@ -23,7 +22,7 @@ bot = Bot(token=cfg.tg_bot_token)
 
 
 def format_exception(exc: Exception) -> str:
-    return ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    return ''.join(traceback.TracebackException.from_exception(exc).format())
 
 
 def start(update: Update, context: CallbackContext) -> None:
@@ -32,7 +31,7 @@ def start(update: Update, context: CallbackContext) -> None:
 
 def error(update: Update, context: CallbackContext) -> None:
     logging.warning('Update "%s" caused error "%s"', update, context.error)
-    print(context.error)
+    logging.exception(context.error)
 
 
 def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:

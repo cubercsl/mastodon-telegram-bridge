@@ -4,9 +4,8 @@ import logging
 import traceback
 from tempfile import TemporaryDirectory
 
-from markdownify import markdownify
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
-from telegram import Bot, InputMediaPhoto, InputMediaVideo, Update
+from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, Update
 from telegram.ext import (CallbackContext, CommandHandler, Dispatcher, Filters,
                           MessageHandler, Updater)
 
@@ -35,61 +34,63 @@ def error(update: Update, context: CallbackContext) -> None:
 
 
 def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
-    message = update.channel_post or update.message
-    if message.chat_id != cfg.channel_chat_id:
+    channel_post = update.channel_post
+    if channel_post.chat_id != cfg.channel_chat_id:
         logging.warning(
-            f'Received message from wrong channel id: {message.chat_id}')
-        message.reply_text(
+            f'Received message from wrong channel id: {channel_post.chat_id}')
+        channel_post.reply_text(
             "This bot is only for specific channel.")
         return
     logging.info(
-        f'Received channel message from channel id: {message.chat_id}')
+        f'Received channel message from channel id: {channel_post.chat_id}')
     try:
-        forawrd = None
+        def _get_forward_name() -> str | None:
+            if channel_post.forward_from:
+                return channel_post.forward_from.full_name
+            if channel_post.forward_from_chat:
+                return channel_post.forward_from_chat.title
+            if channel_post.forward_sender_name:
+                return channel_post.forward_sender_name
+            return None
+
+        forawrd = _get_forward_name()
         media_ids = None
         text = ''
 
-        if message.forward_from:
-            forawrd = message.forward_from.full_name
-        elif message.forward_from_chat:
-            forawrd = message.forward_from_chat.title
-        elif message.forward_sender_name:
-            forawrd = message.forward_sender_name
-
-        if message.photo:
-            if message.media_group_id:
+        if channel_post.photo:
+            if channel_post.media_group_id:
                 logging.info('This is a media group. Skip it.')
                 return
             with TemporaryDirectory(prefix='mastodon') as tmpdir:
-                text = message.caption or ''
+                text = channel_post.caption or ''
                 if any(tag in text for tag in cfg.noforward_tags):
                     logging.info(
                         'Do not forward this channel message to mastodon.')
                     return
-                file_path = f'{tmpdir}/{message.photo[-1].file_unique_id}'
-                message.photo[-1].get_file().download(
+                file_path = f'{tmpdir}/{channel_post.photo[-1].file_unique_id}'
+                channel_post.photo[-1].get_file().download(
                     custom_path=file_path)
                 media_ids = mastondon.media_post(file_path).id
-        elif message.video:
+        elif channel_post.video:
             with TemporaryDirectory(prefix='mastodon') as tmpdir:
-                text = message.caption or ''
+                text = channel_post.caption or ''
                 if any(tag in text for tag in cfg.noforward_tags):
                     logging.info(
                         'Do not forward this channel message to mastodon.')
                     return
-                file_path = f'{tmpdir}/{message.video.file_name}'
-                message.video.get_file().download(custom_path=file_path)
+                file_path = f'{tmpdir}/{channel_post.video.file_name}'
+                channel_post.video.get_file().download(custom_path=file_path)
                 media_ids = mastondon.media_post(file_path).id
-        elif message.text:
-            text = message.text
+        elif channel_post.text:
+            text = channel_post.text
             if any(tag in text for tag in cfg.noforward_tags):
                 logging.info(
                     'Do not forward this channel message to mastodon.')
                 return
-            if cfg.show_forward_info and forawrd:
+            if forawrd:
                 text += f'\n\nForwarded from {forawrd}'
             if cfg.add_link_in_mastodon:
-                link = f'from: https://t.me/c/{str(message.chat_id)[4:]}/{message.message_id}'
+                link = f'from: https://t.me/c/{str(channel_post.chat_id)[4:]}/{channel_post.message_id}'
                 text += f'\n\n{link}'
         else:
             logging.info(f'Unsupported message type, skip it.')
@@ -98,7 +99,7 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
         if cfg.show_forward_info and forawrd:
             text += f'\n\nForwarded from {forawrd}'
         if cfg.add_link_in_mastodon:
-            link = f'from: https://t.me/c/{str(message.chat_id)[4:]}/{message.message_id}'
+            link = f'from: https://t.me/c/{str(channel_post.chat_id)[4:]}/{channel_post.message_id}'
             text += f'\n\n{link}'
         mastondon.status_post(
             status=text, visibility='public', media_ids=media_ids)
@@ -107,7 +108,7 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logging.exception(e)
         context.bot.send_message(
-            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode='Markdown')
+            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode='MarkdownV2')
 
 
 def send_message_to_telegram(status: AttribAccessDict) -> None:
@@ -124,7 +125,7 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
                 # check if it is a reblog
                 # get the original message
                 status = status.reblog
-            txt = markdownify(status.content)
+            txt = status.content
             if cfg.add_link_in_telegram:
                 txt += f"from: {status.url}"
             logging.info(f'Sending message to telegram channel: {txt}')
@@ -133,10 +134,10 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
                 for item in status.media_attachments:
                     if item.type == 'image':
                         medias.append(InputMediaPhoto(
-                            item.url, parse_mode='Markdown'))
+                            item.url, parse_mode='HTML'))
                     elif item.type == 'video':
                         medias.append(InputMediaVideo(
-                            item.url, parse_mode='Markdown'))
+                            item.url, parse_mode='HTML'))
                 medias[0].caption = txt
                 logging.info('Sending media group to telegram channel.')
                 bot.send_media_group(cfg.channel_chat_id, medias)
@@ -144,11 +145,11 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
                 logging.info(
                     'Sending pure-text message to telegram channel.')
                 bot.send_message(
-                    cfg.channel_chat_id, txt, parse_mode='Markdown', disable_web_page_preview=True)
+                    cfg.channel_chat_id, txt, parse_mode='HTML', disable_web_page_preview=True)
     except Exception as e:
         logging.exception(e)
         bot.send_message(
-            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode='Markdown')
+            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode='MarkdownV2')
 
 
 if __name__ == '__main__':
@@ -161,6 +162,7 @@ if __name__ == '__main__':
     dp: Dispatcher = updater.dispatcher
     dp.add_error_handler(error)
     dp.add_handler(CommandHandler('start', start))
-    dp.add_handler(MessageHandler(~Filters.command, send_message_to_mastodon))
+    dp.add_handler(MessageHandler(
+        Filters.update.channel_post, send_message_to_mastodon))
     updater.start_polling()
     updater.idle()

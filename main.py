@@ -44,6 +44,9 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
         f'Received channel message from chatid: {message.chat_id} message: {pformat(update)}')
     try:
         forawrd = None
+        media_ids = None
+        text = ''
+
         if message.forward_from:
             forawrd = message.forward_from.full_name
         elif message.forward_from_chat:
@@ -57,7 +60,7 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
                 return
             with TemporaryDirectory(prefix='mastodon') as tmpdir:
                 text = message.caption or ''
-                if "#noforward" in text:
+                if any(tag in text for tag in cfg.noforward_tags):
                     logging.info(
                         'Do not forward this channel message to mastodon.')
                     return
@@ -65,29 +68,19 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
                 message.photo[-1].get_file().download(
                     custom_path=file_path)
                 media_ids = mastondon.media_post(file_path).id
-                if cfg.show_forward_info and forawrd:
-                    text += f'\n\nForwarded from {forawrd}'
-                if cfg.add_link_in_mastodon:
-                    link = f'from: https://t.me/c/{str(message.chat_id)[4:]}/{message.message_id}'
-                    text += f'\n\n{link}'
                 mastondon.status_post(
                     status=text, visibility='public', media_ids=media_ids)
         elif message.video:
             with TemporaryDirectory(prefix='mastodon') as tmpdir:
                 text = message.caption or ''
-                if "#noforward" in text:
+                if any(tag in text for tag in cfg.noforward_tags):
                     logging.info(
                         'Do not forward this channel message to mastodon.')
                     return
                 file_path = f'{tmpdir}/{message.video.file_name}'
                 message.video.get_file().download(custom_path=file_path)
                 media_ids = mastondon.media_post(file_path).id
-                if cfg.add_link_in_mastodon:
-                    link = f'from: https://t.me/c/{str(message.chat_id)[4:]}/{message.message_id}'
-                    text += f'\n\n{link}'
-                mastondon.status_post(
-                    status=text, visibility='public', media_ids=media_ids)
-        else:
+        elif message.text:
             text = message.text
             if any(tag in text for tag in cfg.noforward_tags):
                 logging.info(
@@ -98,7 +91,17 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
             if cfg.add_link_in_mastodon:
                 link = f'from: https://t.me/c/{str(message.chat_id)[4:]}/{message.message_id}'
                 text += f'\n\n{link}'
-            mastondon.status_post(status=text, visibility='public')
+        else:
+            logging.info(f'Unsupported message type, skip it.')
+            return
+    
+        if cfg.show_forward_info and forawrd:
+            text += f'\n\nForwarded from {forawrd}'
+        if cfg.add_link_in_mastodon:
+            link = f'from: https://t.me/c/{str(message.chat_id)[4:]}/{message.message_id}'
+            text += f'\n\n{link}'
+        mastondon.status_post(
+            status=text, visibility='public', media_ids=media_ids)
         context.bot.send_message(
             cfg.pm_chat_id, f'Successfully forward message to mastodon.\n{text}')
     except Exception as e:

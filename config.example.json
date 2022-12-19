@@ -1,0 +1,16 @@
+{
+    "log_level": "INFO",
+    "tg_bot_token": "",
+    "channel_chat_id": 0,
+    "pm_chat_id": 0,
+    "mastodon_host": "",
+    "mastodon_api_access_token": "",
+    "mastodon_app_name": "",
+    "mastodon_username": "",
+    "scope": ["public", "unlisted", "private", "direct"],
+    "add_link_in_telegram": true,
+    "add_link_in_mastodon": false,
+    "show_forwarded_info": true,
+    "noforward_tags": ["#noforward", "#nofwd", "#mastodon"]
+  }
+  

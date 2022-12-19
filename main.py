@@ -108,19 +108,23 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logging.exception(e)
         context.bot.send_message(
-            cfg.pm_chat_id, f'Exception: ```{format_exception(e)}```', parse_mode='Markdown')
+            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode='Markdown')
 
 
 def send_message_to_telegram(status: AttribAccessDict) -> None:
     def is_valid(status: AttribAccessDict) -> bool:
         # check if the message is from the telegram channel or another app
         return status.account.username == cfg.mastodon_username and \
-            status.application.name != cfg.mastodon_app_name and \
+            (status.application is None or status.application.name != cfg.mastodon_app_name) and \
             status.in_reply_to_id is None and \
             status.visibility in cfg.scope
     try:
         if is_valid(status):
             logging.info(f'Forwarding message from mastodon to telegram.')
+            if status.reblog:
+                # check if it is a reblog
+                # get the original message
+                status = status.reblog
             txt = markdownify(status.content)
             if cfg.add_link_in_telegram:
                 txt += f"from: {status.url}"
@@ -145,7 +149,7 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
     except Exception as e:
         logging.exception(e)
         bot.send_message(
-            cfg.pm_chat_id, f'Exception: ```{format_exception(e)}```', parse_mode='Markdown')
+            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode='Markdown')
 
 
 if __name__ == '__main__':

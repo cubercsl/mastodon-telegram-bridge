@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 import json
 import logging
+import traceback
 from pprint import pformat
 from tempfile import TemporaryDirectory
-from typing import Any
 
 from markdownify import markdownify
-from mastodon import CallbackStreamListener, Mastodon, AttribAccessDict
+from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
 from telegram import Bot, InputMediaPhoto, InputMediaVideo, Update
 from telegram.ext import (CallbackContext, CommandHandler, Dispatcher, Filters,
                           MessageHandler, Updater)
-
 
 with open('config.json', 'r') as f:
     cfg = json.load(f, object_hook=AttribAccessDict)
@@ -21,6 +20,10 @@ logging.basicConfig(level=cfg.log_level,
 mastondon = Mastodon(access_token=cfg.mastodon_api_access_token,
                      api_base_url=cfg.mastodon_host)
 bot = Bot(token=cfg.tg_bot_token)
+
+
+def format_exception(exc: Exception) -> str:
+    return ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
 
 def start(update: Update, context: CallbackContext) -> None:
@@ -92,7 +95,7 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
         else:
             logging.info(f'Unsupported message type, skip it.')
             return
-    
+
         if cfg.show_forward_info and forawrd:
             text += f'\n\nForwarded from {forawrd}'
         if cfg.add_link_in_mastodon:
@@ -103,12 +106,13 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
         context.bot.send_message(
             cfg.pm_chat_id, f'Successfully forward message to mastodon.\n{text}')
     except Exception as e:
-        logging.warning(e)
-        context.bot.send_message(cfg.pm_chat_id, f'Exception: {e}')
+        logging.exception(e)
+        context.bot.send_message(
+            cfg.pm_chat_id, f'Exception: ```{format_exception(e)}```', parse_mode='Markdown')
 
 
 def send_message_to_telegram(status: AttribAccessDict) -> None:
-    def is_valid(status: Any):
+    def is_valid(status: AttribAccessDict) -> bool:
         # check if the message is from the telegram channel or another app
         return status.account.username == cfg.mastodon_username and \
             status.application.name != cfg.mastodon_app_name and \
@@ -140,8 +144,9 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
                 bot.send_message(
                     cfg.channel_chat_id, txt, parse_mode='Markdown', disable_web_page_preview=True)
     except Exception as e:
-        logging.warning(e)
-        bot.send_message(cfg.pm_chat_id, f'Exception: {e}')
+        logging.exception(e)
+        bot.send_message(
+            cfg.pm_chat_id, f'Exception: ```{format_exception(e)}```', parse_mode='Markdown')
 
 
 if __name__ == '__main__':

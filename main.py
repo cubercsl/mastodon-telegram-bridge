@@ -68,8 +68,6 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
                 message.photo[-1].get_file().download(
                     custom_path=file_path)
                 media_ids = mastondon.media_post(file_path).id
-                mastondon.status_post(
-                    status=text, visibility='public', media_ids=media_ids)
         elif message.video:
             with TemporaryDirectory(prefix='mastodon') as tmpdir:
                 text = message.caption or ''

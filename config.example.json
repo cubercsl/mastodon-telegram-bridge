@@ -1,5 +1,4 @@
 {
-    "log_level": "INFO",
     "tg_bot_token": "",
     "channel_chat_id": 0,
     "pm_chat_id": 0,

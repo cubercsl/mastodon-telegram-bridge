@@ -1,0 +1,14 @@
+[project]
+name = "mastodon-telegram-bridge"
+version = "0.1.0"
+description = "A simple bridge between Mastodon and Telegram"
+license = { text = "MIT" }
+authors = [ { name = "cubercsl", email = "hi@cubercsl.site" } ]
+dependencies = [
+    "Mastodon.py~=1.8",
+    "markdownify~=0.11",
+    "python-telegram-bot~=13.15"
+]
+
+[project.scripts]
+mastodon-telegram-bridge = "mastodon_telegram_bridge.main:main"

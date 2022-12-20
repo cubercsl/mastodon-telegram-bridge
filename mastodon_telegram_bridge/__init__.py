@@ -1,4 +1,9 @@
+import logging
+import traceback
+
 from markdownify import MarkdownConverter
+
+logger = logging.getLogger(__name__)
 
 
 class TelegramMarkdownConverter(MarkdownConverter):
@@ -21,5 +26,10 @@ class TelegramMarkdownConverter(MarkdownConverter):
             text = text.replace('`', r'\`')
         return text
 
+
 def markdownify(text: str, **options) -> str:
     return TelegramMarkdownConverter(**options).convert(text)
+
+
+def format_exception(exc: Exception) -> str:
+    return ''.join(traceback.TracebackException.from_exception(exc).format())

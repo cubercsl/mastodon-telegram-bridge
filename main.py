@@ -4,11 +4,12 @@ import logging
 import traceback
 from tempfile import TemporaryDirectory
 
-from markdownify import markdownify
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
 from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update
 from telegram.ext import (CallbackContext, CommandHandler, Dispatcher, Filters,
                           MessageHandler, Updater)
+
+from utils import markdownify
 
 with open('config.json', 'r') as f:
     cfg = json.load(f, object_hook=AttribAccessDict)
@@ -47,7 +48,7 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
     try:
         def _get_forward_name() -> str | None:
             if channel_post.forward_from:
-                return channel_post.forward_from.full_name
+                return channel_post.forward_from.name
             if channel_post.forward_from_chat:
                 return channel_post.forward_from_chat.title
             if channel_post.forward_sender_name:
@@ -89,7 +90,7 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
                     'Do not forward this channel message to mastodon.')
                 return
             if forawrd:
-                text += f'\n\nForwarded from {forawrd}'
+                text += f'\n\nForwarded from telegram: {forawrd}'
             if cfg.add_link_in_mastodon:
                 link = f'from: https://t.me/c/{str(channel_post.chat_id)[4:]}/{channel_post.message_id}'
                 text += f'\n\n{link}'

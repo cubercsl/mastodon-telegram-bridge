@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 
 from markdownify import markdownify
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
-from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, Update
+from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update
 from telegram.ext import (CallbackContext, CommandHandler, Dispatcher, Filters,
                           MessageHandler, Updater)
 
@@ -109,7 +109,7 @@ def send_message_to_mastodon(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         logging.exception(e)
         context.bot.send_message(
-            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode='MarkdownV2')
+            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode=ParseMode.MARKDOWN)
 
 
 def send_message_to_telegram(status: AttribAccessDict) -> None:
@@ -135,10 +135,10 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
                 for item in status.media_attachments:
                     if item.type == 'image':
                         medias.append(InputMediaPhoto(
-                            item.url, parse_mode='MarkdownV2'))
+                            item.url, parse_mode=ParseMode.MARKDOWN))
                     elif item.type == 'video':
                         medias.append(InputMediaVideo(
-                            item.url, parse_mode='MarkdownV2'))
+                            item.url, parse_mode=ParseMode.MARKDOWN))
                 medias[0].caption = txt
                 logging.info('Sending media group to telegram channel.')
                 bot.send_media_group(cfg.channel_chat_id, medias)
@@ -146,11 +146,11 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
                 logging.info(
                     'Sending pure-text message to telegram channel.')
                 bot.send_message(
-                    cfg.channel_chat_id, txt, parse_mode='MarkdownV2', disable_web_page_preview=True)
+                    cfg.channel_chat_id, txt, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
     except Exception as e:
         logging.exception(e)
         bot.send_message(
-            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode='MarkdownV2')
+            cfg.pm_chat_id, f'```{format_exception(e)}```', parse_mode=ParseMode.MARKDOWN)
 
 
 if __name__ == '__main__':

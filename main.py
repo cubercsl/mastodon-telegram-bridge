@@ -4,6 +4,7 @@ import logging
 import traceback
 from tempfile import TemporaryDirectory
 
+from markdownify import markdownify
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
 from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, Update
 from telegram.ext import (CallbackContext, CommandHandler, Dispatcher, Filters,
@@ -125,7 +126,7 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
                 # check if it is a reblog
                 # get the original message
                 status = status.reblog
-            txt = status.content
+            txt = markdownify(status.content)
             if cfg.add_link_in_telegram:
                 txt += f"from: {status.url}"
             logging.info(f'Sending message to telegram channel: {txt}')
@@ -134,10 +135,10 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
                 for item in status.media_attachments:
                     if item.type == 'image':
                         medias.append(InputMediaPhoto(
-                            item.url, parse_mode='HTML'))
+                            item.url, parse_mode='MarkdownV2'))
                     elif item.type == 'video':
                         medias.append(InputMediaVideo(
-                            item.url, parse_mode='HTML'))
+                            item.url, parse_mode='MarkdownV2'))
                 medias[0].caption = txt
                 logging.info('Sending media group to telegram channel.')
                 bot.send_media_group(cfg.channel_chat_id, medias)
@@ -145,7 +146,7 @@ def send_message_to_telegram(status: AttribAccessDict) -> None:
                 logging.info(
                     'Sending pure-text message to telegram channel.')
                 bot.send_message(
-                    cfg.channel_chat_id, txt, parse_mode='HTML', disable_web_page_preview=True)
+                    cfg.channel_chat_id, txt, parse_mode='MarkdownV2', disable_web_page_preview=True)
     except Exception as e:
         logging.exception(e)
         bot.send_message(

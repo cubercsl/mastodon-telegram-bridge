@@ -23,6 +23,7 @@ class Bridge:
                  add_link_in_telegram: bool = True,
                  add_link_in_mastodon: bool = False,
                  show_forward_info: bool = True,
+                 only_forward_reblog_link: bool = True,
                  forward_tags: List[str] = None,
                  noforward_tags: List[str] = None) -> None:
         self.mastodon = Mastodon(access_token=mastodon_api_access_token,
@@ -52,7 +53,13 @@ class Bridge:
             scope=scope,
             forward_tags=forward_tags,
             noforward_tags=noforward_tags,
+            # whether forward only the link of the reblogged message in telegram
+            only_forward_reblog_link=only_forward_reblog_link,
         )
+
+        if only_forward_reblog_link and not add_link_in_telegram:
+            logger.warning('only_forward_reblog_link is set, but add_link_in_telegram is not. '
+                           'The reblog link will not be forwarded.')
 
     def _should_forward(sef, msg: str) -> bool:
         if sef.cfg.forward_tags:
@@ -121,6 +128,11 @@ class Bridge:
                 if status.reblog:
                     # check if it is a reblog
                     # get the original message
+                    if self.cfg.only_forward_reblog_link:
+                        text = self.telegram_footer(status.reblog)
+                        logger.info('Sending message to telegram channel: %s', text)
+                        self.bot.send_message(self.cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
+                        return
                     status = status.reblog
                 text = markdownify(status.content)
                 if status.spoiler_text:

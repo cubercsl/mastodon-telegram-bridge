@@ -1,11 +1,11 @@
 from tempfile import TemporaryDirectory
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
 from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update
 from telegram.ext import CallbackContext, CommandHandler, Dispatcher, Filters, MessageHandler, Updater
 
-from mastodon_telegram_bridge import MastodonToTelegramOptions, TelegramToMastodonOptions, logger
+from mastodon_telegram_bridge import BridgeOptions, MastodonToTelegramOptions, TelegramToMastodonOptions, logger
 from mastodon_telegram_bridge.utils import MastodonFooter, TelegramFooter, format_exception, markdownify
 
 ValueType = str | int | bool | List[str]
@@ -14,15 +14,15 @@ OptionType = Dict[str, ValueType]
 
 class Bridge:
     def __init__(self, *,
-                 telegram: Dict[str, ValueType],
-                 mastodon: Dict[str, ValueType],
-                 options: Dict[str, OptionType]) -> None:
-
-        self.mastodon_to_telegram = MastodonToTelegramOptions()
-        self.telegram_to_mastodon = TelegramToMastodonOptions()
-
-        self.mastodon_to_telegram.update(**options['mastodon_to_telegram'])
-        self.telegram_to_mastodon.update(**options['telegram_to_mastodon'])
+                 telegram: Dict[str, str],
+                 mastodon: Dict[str, str],
+                 options: Dict[str, OptionType] | Dict[str, BridgeOptions]) -> None:
+        if isinstance(options, BridgeOptions):
+            self.mastodon_to_telegram = options['mastodon_to_telegram']
+            self.telegram_to_mastodon = options['telegram_to_mastodon']
+        else:
+            self.mastodon_to_telegram = MastodonToTelegramOptions(**options['mastodon_to_telegram'])
+            self.telegram_to_mastodon = TelegramToMastodonOptions(**options['telegram_to_mastodon'])
 
         logger.info('mastodon_to_telegram: %s ', self.mastodon_to_telegram)
         logger.info('telegram_to_mastodon: %s ', self.telegram_to_mastodon)
@@ -40,17 +40,15 @@ class Bridge:
         if self.telegram_to_mastodon.include and self.telegram_to_mastodon.exclude:
             logger.warning('Both include and exclude in telegram_to_mastodon tag filter are set, exclude will be ignored')
 
+        self.mastodon_footer = MastodonFooter(self.telegram_to_mastodon)
+        self.telegram_footer = TelegramFooter(self.mastodon_to_telegram)
+
         self.mastodon = Mastodon(access_token=mastodon['access_token'],
                                  api_base_url=mastodon['api_base_url'])
         self.bot = Bot(token=telegram['bot_token'])
 
-        self.mastodon_footer = MastodonFooter(self.telegram_to_mastodon)
-        self.telegram_footer = TelegramFooter(self.mastodon_to_telegram)
-
-        # get the username of the mastodon account
         self.mastodon_username: str = self.mastodon.account_verify_credentials().username
-
-        self.mastodon_app_name: str = mastodon['app_name']
+        self.mastodon_app_name: str = self.mastodon.app_verify_credentials().name
         logger.info('Username: %s, App name: %s', self.mastodon_username, self.mastodon_app_name)
 
     def _should_forward_to_mastodon(self, msg: str) -> bool:

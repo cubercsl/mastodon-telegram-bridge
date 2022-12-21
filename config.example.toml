@@ -10,8 +10,6 @@ api_base_url = "mastodon.social"
 # access token for the bot account
 access_token = "ABCDEF1234567890ABCDEF1234567890ABCDEF12345"
 
-# to check whether the message is from the bot itself
-app_name = "telegram-mastodon-bot"
 
 [options]
 

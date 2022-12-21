@@ -114,7 +114,7 @@ class Bridge:
             else:
                 logger.info('Unsupported message type, skip it.')
                 return
-            text += self.mastodon_footer(channel_post)
+            text += '\n' + self.mastodon_footer(channel_post)
             self.mastodon.status_post(status=text, visibility='public', media_ids=media_ids)
             context.bot.send_message(self.cfg.pm_chat_id, f'Successfully forward message to mastodon.\n{text}')
         except Exception as exc:
@@ -137,7 +137,7 @@ class Bridge:
                 text = markdownify(status.content)
                 if status.spoiler_text:
                     text = f'*{status.spoiler_text}*\n\n{text}'
-                text += self.telegram_footer(status)
+                text += '\n' + self.telegram_footer(status)
                 logger.info('Sending message to telegram channel: %s', text)
                 if len(status.media_attachments) > 0:
                     medias = []

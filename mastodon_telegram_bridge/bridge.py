@@ -37,9 +37,6 @@ class Bridge:
         if self.telegram_to_mastodon.disable and self.mastodon_to_telegram.disable:
             raise ValueError('Both telegram_to_mastodon and mastodon_to_telegram are disabled, nothing to do.')
 
-        if self.telegram_to_mastodon.include and self.telegram_to_mastodon.exclude:
-            logger.warning('Both include and exclude in telegram_to_mastodon tag filter are set, exclude will be ignored')
-
         self.mastodon_footer = MastodonFooter(self.telegram_to_mastodon)
         self.telegram_footer = TelegramFooter(self.mastodon_to_telegram)
 
@@ -47,15 +44,16 @@ class Bridge:
                                  api_base_url=mastodon['api_base_url'])
         self.bot = Bot(token=telegram['bot_token'])
 
-        self.mastodon_username: str = self.mastodon.account_verify_credentials().username
+        self.mastodon_username: str = self.mastodon.me().username
         self.mastodon_app_name: str = self.mastodon.app_verify_credentials().name
         logger.info('Username: %s, App name: %s', self.mastodon_username, self.mastodon_app_name)
 
     def _should_forward_to_mastodon(self, msg: str) -> bool:
+        excluded = any(tag in msg for tag in self.telegram_to_mastodon.exclude)
         if include := self.telegram_to_mastodon.include:
-            return any(tag in msg for tag in include)
-        return not any(tag in msg for tag in self.telegram_to_mastodon.exclude)
-
+            return any(tag in msg for tag in include) and not excluded
+        return not excluded
+            
     def _should_forward_to_telegram(self, status: AttribAccessDict) -> bool:
         # check if the message is from the telegram channel or another app
         return status.account.username == self.mastodon_username and \

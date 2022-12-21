@@ -10,12 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramMarkdownConverter(MarkdownConverter):
-    def __init__(self, **options):
+    class Options(MarkdownConverter.Options):
         # https://core.telegram.org/bots/api#markdown-style
-        options['autolinks'] = False
-        options['escape_brackets'] = True
-        options['escape_backquote'] = True
-        super().__init__(**options)
+        autolinks = False
+        escape_brackets = True
+        escape_backquote = True
 
     def escape(self, text):
         if not text:
@@ -32,8 +31,8 @@ class TelegramMarkdownConverter(MarkdownConverter):
 
 
 class Footer:
-    def __init__(self):
-        pass
+    def __init__(self, options):
+        self.options = options
 
     def _forwarded_from(self, name: str) -> str:
         return f'Forwarded from {name}'
@@ -47,11 +46,6 @@ class Footer:
 
 
 class MastodonFooter(Footer):
-    def __init__(self, **options):
-        super().__init__()
-        self.add_link_in_mastodon = options.get('add_link_in_mastodon', False)
-        self.show_forward_info = options.get('show_forward_info', False)
-
     def __get_name(self, message: Message) -> str:
         if message.forward_from:
             return message.forward_from.name
@@ -66,24 +60,22 @@ class MastodonFooter(Footer):
 
     def make_footer(self, message: Message) -> str:
         footer = []
-        if self.show_forward_info:
+        if self.options.show_forward_from:
             forwarded_from = self.__get_name(message)
             if forwarded_from:
                 footer.append(self._forwarded_from(forwarded_from))
-        if self.add_link_in_mastodon:
+        if self.options.add_link:
             footer.append(self._from(self.__get_link(message)))
         return footer
 
 
 class TelegramFooter(Footer):
-    def __init__(self, **options):
-        super().__init__()
-        self.add_link_in_telegram = options.get('add_link_in_telegram', False)
-
     def make_footer(self, status: AttribAccessDict) -> List[str]:
         footer = []
-        if self.add_link_in_telegram:
+        if self.options.add_link:
             footer.append(status.url)
+        if self.options.tags:
+            footer.append(' '.join(f'{tag}' for tag in self.options.tags))
         return footer
 
 

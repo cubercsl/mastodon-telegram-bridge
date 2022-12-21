@@ -1,81 +1,87 @@
 from tempfile import TemporaryDirectory
-from typing import List
+from typing import Any, Dict
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
-from telegram import (Bot, InputMediaPhoto, InputMediaVideo,
-                      ParseMode, Update)
+from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update
 from telegram.ext import (CallbackContext, CommandHandler, Dispatcher, Filters,
                           MessageHandler, Updater)
 
-from mastodon_telegram_bridge import format_exception, logger, markdownify, MastodonFooter, TelegramFooter
+from mastodon_telegram_bridge import (MastodonFooter, TelegramFooter,
+                                      format_exception, logger, markdownify)
 
 
 class Bridge:
     def __init__(self, *,
-                 tg_bot_token: str = '',
-                 channel_chat_id: int = 0,
-                 pm_chat_id: int = 0,
-                 mastodon_host: str = '',
-                 mastodon_api_access_token: str = '',
-                 mastodon_app_name: str = '',
-                 mastodon_username: str = '',
-                 scope: List[str] = None,
-                 add_link_in_telegram: bool = True,
-                 add_link_in_mastodon: bool = False,
-                 show_forward_info: bool = True,
-                 only_forward_reblog_link: bool = True,
-                 forward_tags: List[str] = None,
-                 noforward_tags: List[str] = None) -> None:
-        self.mastodon = Mastodon(access_token=mastodon_api_access_token,
-                                 api_base_url=mastodon_host)
-        self.bot = Bot(token=tg_bot_token)
+                 telegram: Dict[str, Any],
+                 mastodon: Dict[str, Any],
+                 options: Dict[str, Any]) -> None:
 
-        self.mastodon_footer = MastodonFooter(add_link_in_mastodon=add_link_in_mastodon,
-                                              show_forward_info=show_forward_info)
-        self.telegram_footer = TelegramFooter(add_link_in_telegram=add_link_in_telegram)
+        self.options = AttribAccessDict(
+            telegram_to_mastodon=AttribAccessDict(
+                disable=False,
+                channel_id=0,
+                pm_chat_id=0,
+                add_link=False,
+                show_forward_from=True,
+                include=[],
+                exclude=[],
+            ),
+            mastodon_to_telegram=AttribAccessDict(
+                disable=False,
+                channel_id=0,
+                pm_chat_id=0,
+                scope=["public", "unlisted"],
+                tags=[],
+                add_link=False,
+                forward_reblog_link_only=False,
+            ),
+        )
+        self.options.telegram_to_mastodon.update(options['telegram_to_mastodon'])
+        self.options.mastodon_to_telegram.update(options['mastodon_to_telegram'])
+
+        # check if the tags start with #
+        for tags in (self.options.telegram_to_mastodon.include,
+                     self.options.telegram_to_mastodon.exclude,
+                     self.options.mastodon_to_telegram.tags):
+            if any(not tag.startswith('#') for tag in tags):
+                raise ValueError('Tags must start with #')
+
+        # check if both telegram_to_mastodon and mastodon_to_telegram are disabled
+        if self.options.telegram_to_mastodon.disable and self.options.mastodon_to_telegram.disable:
+            raise ValueError('Both telegram_to_mastodon and mastodon_to_telegram are disabled, nothing to do.')
+
+        if self.options.telegram_to_mastodon.include and self.options.telegram_to_mastodon.exclude:
+            logger.warning('Both include and exclude in telegram_to_mastodon tag filter are set, exclude will be ignored')
+
+        self.mastodon = Mastodon(access_token=mastodon['access_token'],
+                                 api_base_url=mastodon['api_base_url'])
+        self.bot = Bot(token=telegram['bot_token'])
+
+        self.mastodon_footer = MastodonFooter(self.options.telegram_to_mastodon)
+        self.telegram_footer = TelegramFooter(self.options.mastodon_to_telegram)
 
         # get the username of the mastodon account
         self.mastodon_username = self.mastodon.account_verify_credentials().username
-        if mastodon_username and mastodon_username != self.mastodon_username:
-            logger.warning('The username in the config file (%s) does not match the username of the mastodon account (%s).',
-                           mastodon_username, self.mastodon_username)
-        self.mastodon_app_name = mastodon_app_name
+
+        self.mastodon_app_name = mastodon['app_name']
         logger.info('Username: %s, App name: %s', self.mastodon_username, self.mastodon_app_name)
 
-        if forward_tags and noforward_tags:
-            logger.warning('Both forward_tags and noforward_tags are set, noforward_tags will be ignored.')
-
-        self.cfg = AttribAccessDict(
-            # get the chat id of the telegram channel and error reporting chat
-            channel_chat_id=channel_chat_id,
-            pm_chat_id=pm_chat_id,
-            # filter out the messages that should not be forwarded
-            scope=scope,
-            forward_tags=forward_tags,
-            noforward_tags=noforward_tags,
-            # whether forward only the link of the reblogged message in telegram
-            only_forward_reblog_link=only_forward_reblog_link,
-        )
-
-        if only_forward_reblog_link and not add_link_in_telegram:
-            logger.warning('only_forward_reblog_link is set, but add_link_in_telegram is not. '
-                           'The reblog link will not be forwarded.')
-
-    def _should_forward(sef, msg: str) -> bool:
-        if sef.cfg.forward_tags:
-            return any(tag in msg for tag in sef.cfg.forward_tags)
-        return not any(tag in msg for tag in sef.cfg.noforward_tags)
+    def _should_forward_to_mastodon(self, msg: str) -> bool:
+        if include := self.options.telegram_to_mastodon.include:
+            return any(tag in msg for tag in include)
+        return not any(tag in msg for tag in self.options.telegram_to_mastodon.exclude)
 
     def _should_forward_to_telegram(self, status: AttribAccessDict) -> bool:
         # check if the message is from the telegram channel or another app
         return status.account.username == self.mastodon_username and \
             (status.application is None or status.application.name != self.mastodon_app_name) and \
             status.in_reply_to_id is None and \
-            status.visibility in self.cfg.scope
+            status.visibility in self.options.mastodon_to_telegram.scope
 
     def _send_message_to_mastodon(self, update: Update, context: CallbackContext) -> None:
         channel_post = update.channel_post
-        if channel_post.chat_id != self.cfg.channel_chat_id:
+        cfg: AttribAccessDict = self.options.telegram_to_mastodon
+        if channel_post.chat_id != cfg.channel_chat_id:
             logger.warning('Received message from wrong channel id: %d', channel_post.chat_id)
             channel_post.reply_text('This bot is only for specific channel.')
             return
@@ -91,7 +97,7 @@ class Bridge:
                     return
                 with TemporaryDirectory(prefix='mastodon') as tmpdir:
                     text = channel_post.caption or ''
-                    if not self._should_forward(text):
+                    if not self._should_forward_to_mastodon(text):
                         logger.info('Do not forward this channel message to mastodon.')
                         return
                     file_path = f'{tmpdir}/{channel_post.photo[-1].file_unique_id}'
@@ -100,7 +106,7 @@ class Bridge:
             elif channel_post.video:
                 with TemporaryDirectory(prefix='mastodon') as tmpdir:
                     text = channel_post.caption or ''
-                    if not self._should_forward(text):
+                    if not self._should_forward_to_mastodon(text):
                         logger.info('Do not forward this channel message to mastodon.')
                         return
                     file_path = f'{tmpdir}/{channel_post.video.file_name}'
@@ -108,30 +114,31 @@ class Bridge:
                     media_ids = self.mastodon.media_post(file_path).id
             elif channel_post.text:
                 text = channel_post.text
-                if not self._should_forward(text):
+                if not self._should_forward_to_mastodon(text):
                     logger.info('Do not forward this channel message to mastodon.')
                     return
             else:
                 logger.info('Unsupported message type, skip it.')
                 return
             text += '\n' + self.mastodon_footer(channel_post)
-            self.mastodon.status_post(status=text, visibility='public', media_ids=media_ids)
-            context.bot.send_message(self.cfg.pm_chat_id, f'Successfully forward message to mastodon.\n{text}')
+            status: AttribAccessDict = self.mastodon.status_post(status=text, visibility='public', media_ids=media_ids)
+            context.bot.send_message(
+                cfg.pm_chat_id, f'*Successfully forward message to mastodon.*\n{status.url}', parse_mode=ParseMode.MARKDOWN)
         except Exception as exc:
             logger.exception(exc)
-            context.bot.send_message(self.cfg.pm_chat_id, f'```{format_exception(exc)}```', parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(cfg.pm_chat_id, f'```{format_exception(exc)}```', parse_mode=ParseMode.MARKDOWN)
 
     def _send_message_to_telegram(self, status: AttribAccessDict) -> None:
+        cfg: AttribAccessDict = self.options.mastodon_to_telegram
         try:
             if self._should_forward_to_telegram(status):
                 logger.info('Forwarding message from mastodon to telegram.')
                 if status.reblog:
-                    # check if it is a reblog
-                    # get the original message
-                    if self.cfg.only_forward_reblog_link:
+                    # check if it is a reblog and get the original message
+                    if cfg.forward_reblog_link_only:
                         text = self.telegram_footer(status.reblog)
                         logger.info('Sending message to telegram channel: %s', text)
-                        self.bot.send_message(self.cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
+                        self.bot.send_message(cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
                         return
                     status = status.reblog
                 text = markdownify(status.content)
@@ -148,15 +155,14 @@ class Bridge:
                             medias.append(InputMediaVideo(item.url, parse_mode=ParseMode.MARKDOWN))
                     medias[0].caption = text
                     logger.info('Sending media group to telegram channel.')
-                    self.bot.send_media_group(self.cfg.channel_chat_id, medias)
+                    self.bot.send_media_group(cfg.channel_chat_id, medias)
                 else:
                     logger.info('Sending pure-text message to telegram channel.')
-                    self.bot.send_message(self.cfg.channel_chat_id, text,
+                    self.bot.send_message(cfg.channel_chat_id, text,
                                           parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
         except Exception as exc:
             logger.exception(exc)
-            self.bot.send_message(
-                self.cfg.pm_chat_id, f'```{format_exception(exc)}```', parse_mode=ParseMode.MARKDOWN)
+            self.bot.send_message(cfg.pm_chat_id, f'```{format_exception(exc)}```', parse_mode=ParseMode.MARKDOWN)
 
     def _start(self, update: Update, context: CallbackContext) -> None:
         update.message.reply_text('Hi!')
@@ -165,11 +171,9 @@ class Bridge:
         logger.warning('Update "%s" caused error "%s"', update, context.error)
         logger.exception(context.error)
 
-    def run(self, *,
-            telegram_to_mastodon: bool = True,
-            mastodon_to_telegram: bool = True) -> None:
+    def run(self) -> None:
         # Mastodon stream
-        if mastodon_to_telegram:
+        if not self.options.mastodon_to_telegram.disable:
             listener = CallbackStreamListener(update_handler=self._send_message_to_telegram)
             self.mastodon.stream_user(listener=listener, run_async=True)
         else:
@@ -180,7 +184,7 @@ class Bridge:
         dispatcher: Dispatcher = updater.dispatcher
         dispatcher.add_error_handler(self._error)
         dispatcher.add_handler(CommandHandler('start', self._start))
-        if telegram_to_mastodon:
+        if not self.options.telegram_to_mastodon.disable:
             dispatcher.add_handler(MessageHandler(Filters.update.channel_post, self._send_message_to_mastodon))
         else:
             logger.warning('Skip telegram message handler, because telegram to mastodon is disabled.')

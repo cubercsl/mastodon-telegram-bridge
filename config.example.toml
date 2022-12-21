@@ -1,0 +1,62 @@
+[telegram]
+# telegram bot token, e.g. "1234567890:ABCDEF1234567890ABCDEF1234567890ABC"
+bot_token = "1234567890:ABCDEF1234567890ABCDEF1234567890ABC"
+
+
+[mastodon]
+# api base url, e.g. "mastodon.social"
+api_base_url = "mastodon.social"
+
+# access token for the bot account
+access_token = "ABCDEF1234567890ABCDEF1234567890ABCDEF12345"
+
+# to check whether the message is from the bot itself
+app_name = "telegram-mastodon-bot"
+
+[options]
+
+  [options.telegram_to_mastodon]
+  # whether to forward messages from telegram to mastodon
+  disable = false
+
+  # channel or group chat id for messages forwarding
+  channel_chat_id = -1000000000000
+
+  # private chat id for exceptions reporting
+  pm_chat_id = 0
+
+  # whether to add a link to the original post
+  add_link = false
+
+  # whether to show the original post author
+  show_forwarded_from = true
+
+  # optional, filters for messages forwarding
+  # if the message contains any of the tags, it will be forwarded, otherwise ignored
+  # include = []
+
+  # optional, filters for messages forwarding
+  # if the message contains any of the tags, it will be ignored, otherwise forwarded
+  exclude = ["#nofwd", "#noforward", "#mastodon"]
+
+  [options.mastodon_to_telegram]
+  # whether to forward messages from mastodon to telegram
+  disable = false
+
+  # channel or group chat id for messages forwarding
+  channel_chat_id = -1000000000000
+
+  # private chat id for exceptions reporting
+  pm_chat_id = 0
+
+  # the scope should be forward to telegram
+  scope = ["public", "unlisted"]
+
+  # optional, additional tags to add to the message
+  # tags = ["#mastodon"]
+
+  # whether to add a link to the original post
+  add_link = true
+
+  # if true, will forward only the link to the original post
+  forward_reblog_link_only = true

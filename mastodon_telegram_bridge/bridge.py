@@ -1,86 +1,73 @@
 from tempfile import TemporaryDirectory
-from typing import Any, Dict
+from typing import Dict, List
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
 from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update
-from telegram.ext import (CallbackContext, CommandHandler, Dispatcher, Filters,
-                          MessageHandler, Updater)
+from telegram.ext import CallbackContext, CommandHandler, Dispatcher, Filters, MessageHandler, Updater
 
-from mastodon_telegram_bridge import (MastodonFooter, TelegramFooter,
-                                      format_exception, logger, markdownify)
+from mastodon_telegram_bridge import MastodonToTelegramOptions, TelegramToMastodonOptions, logger
+from mastodon_telegram_bridge.utils import MastodonFooter, TelegramFooter, format_exception, markdownify
+
+ValueType = str | int | bool | List[str]
+OptionType = Dict[str, ValueType]
 
 
 class Bridge:
     def __init__(self, *,
-                 telegram: Dict[str, Any],
-                 mastodon: Dict[str, Any],
-                 options: Dict[str, Any]) -> None:
+                 telegram: Dict[str, ValueType],
+                 mastodon: Dict[str, ValueType],
+                 options: Dict[str, OptionType]) -> None:
 
-        self.options = AttribAccessDict(
-            telegram_to_mastodon=AttribAccessDict(
-                disable=False,
-                channel_id=0,
-                pm_chat_id=0,
-                add_link=False,
-                show_forward_from=True,
-                include=[],
-                exclude=[],
-            ),
-            mastodon_to_telegram=AttribAccessDict(
-                disable=False,
-                channel_id=0,
-                pm_chat_id=0,
-                scope=["public", "unlisted"],
-                tags=[],
-                add_link=False,
-                forward_reblog_link_only=False,
-            ),
-        )
-        self.options.telegram_to_mastodon.update(options['telegram_to_mastodon'])
-        self.options.mastodon_to_telegram.update(options['mastodon_to_telegram'])
+        self.mastodon_to_telegram = MastodonToTelegramOptions()
+        self.telegram_to_mastodon = TelegramToMastodonOptions()
 
+        self.mastodon_to_telegram.update(**options['mastodon_to_telegram'])
+        self.telegram_to_mastodon.update(**options['telegram_to_mastodon'])
+
+        logger.info('mastodon_to_telegram: %s ', self.mastodon_to_telegram)
+        logger.info('telegram_to_mastodon: %s ', self.telegram_to_mastodon)
         # check if the tags start with #
-        for tags in (self.options.telegram_to_mastodon.include,
-                     self.options.telegram_to_mastodon.exclude,
-                     self.options.mastodon_to_telegram.tags):
+        for tags in (self.telegram_to_mastodon.include,
+                     self.telegram_to_mastodon.exclude,
+                     self.mastodon_to_telegram.tags):
             if any(not tag.startswith('#') for tag in tags):
                 raise ValueError('Tags must start with #')
 
         # check if both telegram_to_mastodon and mastodon_to_telegram are disabled
-        if self.options.telegram_to_mastodon.disable and self.options.mastodon_to_telegram.disable:
+        if self.telegram_to_mastodon.disable and self.mastodon_to_telegram.disable:
             raise ValueError('Both telegram_to_mastodon and mastodon_to_telegram are disabled, nothing to do.')
 
-        if self.options.telegram_to_mastodon.include and self.options.telegram_to_mastodon.exclude:
+        if self.telegram_to_mastodon.include and self.telegram_to_mastodon.exclude:
             logger.warning('Both include and exclude in telegram_to_mastodon tag filter are set, exclude will be ignored')
 
         self.mastodon = Mastodon(access_token=mastodon['access_token'],
                                  api_base_url=mastodon['api_base_url'])
         self.bot = Bot(token=telegram['bot_token'])
 
-        self.mastodon_footer = MastodonFooter(self.options.telegram_to_mastodon)
-        self.telegram_footer = TelegramFooter(self.options.mastodon_to_telegram)
+        self.mastodon_footer = MastodonFooter(self.telegram_to_mastodon)
+        self.telegram_footer = TelegramFooter(self.mastodon_to_telegram)
 
         # get the username of the mastodon account
-        self.mastodon_username = self.mastodon.account_verify_credentials().username
+        self.mastodon_username: str = self.mastodon.account_verify_credentials().username
 
-        self.mastodon_app_name = mastodon['app_name']
+        self.mastodon_app_name: str = mastodon['app_name']
         logger.info('Username: %s, App name: %s', self.mastodon_username, self.mastodon_app_name)
 
     def _should_forward_to_mastodon(self, msg: str) -> bool:
-        if include := self.options.telegram_to_mastodon.include:
+        if include := self.telegram_to_mastodon.include:
             return any(tag in msg for tag in include)
-        return not any(tag in msg for tag in self.options.telegram_to_mastodon.exclude)
+        return not any(tag in msg for tag in self.telegram_to_mastodon.exclude)
 
     def _should_forward_to_telegram(self, status: AttribAccessDict) -> bool:
         # check if the message is from the telegram channel or another app
         return status.account.username == self.mastodon_username and \
             (status.application is None or status.application.name != self.mastodon_app_name) and \
             status.in_reply_to_id is None and \
-            status.visibility in self.options.mastodon_to_telegram.scope
+            status.visibility in self.mastodon_to_telegram.scope
 
     def _send_message_to_mastodon(self, update: Update, context: CallbackContext) -> None:
         channel_post = update.channel_post
-        cfg: AttribAccessDict = self.options.telegram_to_mastodon
+        cfg = self.telegram_to_mastodon
         if channel_post.chat_id != cfg.channel_chat_id:
             logger.warning('Received message from wrong channel id: %d', channel_post.chat_id)
             channel_post.reply_text('This bot is only for specific channel.')
@@ -129,7 +116,7 @@ class Bridge:
             context.bot.send_message(cfg.pm_chat_id, f'```{format_exception(exc)}```', parse_mode=ParseMode.MARKDOWN)
 
     def _send_message_to_telegram(self, status: AttribAccessDict) -> None:
-        cfg: AttribAccessDict = self.options.mastodon_to_telegram
+        cfg = self.mastodon_to_telegram
         try:
             if self._should_forward_to_telegram(status):
                 logger.info('Forwarding message from mastodon to telegram.')
@@ -173,7 +160,7 @@ class Bridge:
 
     def run(self) -> None:
         # Mastodon stream
-        if not self.options.mastodon_to_telegram.disable:
+        if not self.mastodon_to_telegram.disable:
             listener = CallbackStreamListener(update_handler=self._send_message_to_telegram)
             self.mastodon.stream_user(listener=listener, run_async=True)
         else:
@@ -184,7 +171,7 @@ class Bridge:
         dispatcher: Dispatcher = updater.dispatcher
         dispatcher.add_error_handler(self._error)
         dispatcher.add_handler(CommandHandler('start', self._start))
-        if not self.options.telegram_to_mastodon.disable:
+        if not self.telegram_to_mastodon.disable:
             dispatcher.add_handler(MessageHandler(Filters.update.channel_post, self._send_message_to_mastodon))
         else:
             logger.warning('Skip telegram message handler, because telegram to mastodon is disabled.')

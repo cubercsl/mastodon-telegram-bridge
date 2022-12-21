@@ -8,6 +8,12 @@ bot_token = "1234567890:ABCDEF1234567890ABCDEF1234567890ABC"
 api_base_url = "mastodon.social"
 
 # access token for the bot account
+# create a new application at https://<api_base_url>/settings/applications/new
+# the following permissions are required:
+#   read:accounts 
+#   read:statuses   (optional, if you want to forward toot to telegram)
+#   write:media     (optional, if you want to forward media to mastodon)
+#   write:statuses  (optional, if you want to forward toot to mastodon)
 access_token = "ABCDEF1234567890ABCDEF1234567890ABCDEF12345"
 
 
@@ -18,9 +24,11 @@ access_token = "ABCDEF1234567890ABCDEF1234567890ABCDEF12345"
   disable = false
 
   # channel or group chat id for messages forwarding
+  # MUST be a channel, it is not supported the group chat (yet)
   channel_chat_id = -1000000000000
 
   # private chat id for exceptions reporting
+  # you should create a private chat with the bot using /start command
   pm_chat_id = 0
 
   # whether to add a link to the original post
@@ -31,7 +39,9 @@ access_token = "ABCDEF1234567890ABCDEF1234567890ABCDEF12345"
 
   # optional, filters for messages forwarding
   # if the message contains any of the tags, it will be forwarded, otherwise ignored
-  # include = []
+  # espacially, if include is empty, all messages will be forwarded
+  # (except those that contain tags from exclude)
+  include = []
 
   # optional, filters for messages forwarding
   # if the message contains any of the tags, it will be ignored, otherwise forwarded
@@ -41,17 +51,19 @@ access_token = "ABCDEF1234567890ABCDEF1234567890ABCDEF12345"
   # whether to forward messages from mastodon to telegram
   disable = false
 
-  # channel or group chat id for messages forwarding
+  # channel or group chat id for messages forwarding 
+  # can be different from the one used for telegram_to_mastodon
   channel_chat_id = -1000000000000
 
   # private chat id for exceptions reporting
+  # can be different from the one used for telegram_to_mastodon
   pm_chat_id = 0
 
   # the scope should be forward to telegram
   scope = ["public", "unlisted"]
 
   # optional, additional tags to add to the message
-  # tags = ["#mastodon"]
+  tags = ["#mastodon"]
 
   # whether to add a link to the original post
   add_link = true

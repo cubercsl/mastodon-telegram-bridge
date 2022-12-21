@@ -38,9 +38,6 @@ class Footer:
     def _forwarded_from(self, name: str) -> str:
         return f'Forwarded from {name}'
 
-    def _from(self, link: str) -> str:
-        return f'from {link}'
-
     def make_footer(self, _: Message | AttribAccessDict) -> List[str]:
         raise NotImplementedError
 
@@ -86,7 +83,7 @@ class TelegramFooter(Footer):
     def make_footer(self, status: AttribAccessDict) -> List[str]:
         footer = []
         if self.add_link_in_telegram:
-            footer.append(self._from(status.url))
+            footer.append(status.url)
         return footer
 
 

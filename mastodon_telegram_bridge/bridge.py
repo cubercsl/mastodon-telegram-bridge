@@ -160,6 +160,8 @@ class Bridge:
         if mastodon_to_telegram:
             listener = CallbackStreamListener(update_handler=self._send_message_to_telegram)
             self.mastodon.stream_user(listener=listener, run_async=True)
+        else:
+            logger.warning('Skip mastodon stream, because mastodon to telegram is disabled.')
 
         # Telegram bot
         updater = Updater(bot=self.bot, use_context=True)
@@ -168,5 +170,7 @@ class Bridge:
         dispatcher.add_handler(CommandHandler('start', self._start))
         if telegram_to_mastodon:
             dispatcher.add_handler(MessageHandler(Filters.update.channel_post, self._send_message_to_mastodon))
+        else:
+            logger.warning('Skip telegram message handler, because telegram to mastodon is disabled.')
         updater.start_polling()
         updater.idle()

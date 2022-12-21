@@ -10,6 +10,7 @@
     "add_link_in_telegram": true,
     "add_link_in_mastodon": false,
     "show_forward_info": true,
+    "forward_tags": [],
     "noforward_tags": ["#noforward", "#nofwd", "#mastodon"]
   }
   

@@ -1,34 +1,87 @@
-from typing import List, Literal, TypedDict
+from typing import NamedTuple, Literal, Iterable, TypedDict
+
 
 from telegram import File
 
 
-class MediaDict(TypedDict):
+class MediaDict(NamedTuple):
+    """MediaDict
+    """
     media_type: Literal['photo', 'video']
     media_file: File
     caption: str
 
 
-class MastodonToTelegramDict(TypedDict):
+class MediaGroup(NamedTuple):
+    """MediaGroup
+    """
+    medias: Iterable[MediaDict]
+    footer: str
+
+
+class TelegramOptionsDict(TypedDict):
+    """TelegramOptionsDict
+    """
+    token: str
+
+
+class MastodonOptionsDict(TypedDict):
+    """MastodonOptionsDict
+    """
+    api_base_url: str
+    access_token: str
+
+
+class MastodonToTelegramOptionsDict(TypedDict):
+    """Mastodon To Telegram Options Dict
+    """
     disable: bool
     channel_chat_id: int
     pm_chat_id: int
-    scope: List[str]
-    tags: List[str]
+    scope: Iterable[str]
+    tags: Iterable[str]
     add_link: bool
     forward_reblog_link_only: bool
 
 
-class TelegramToMastodonDict(TypedDict):
+class TelegramToMastodonOptionsDict(TypedDict):
+    """Telegram To Mastodon Options Dict
+    """
     disable: bool
     channel_chat_id: int
     pm_chat_id: int
     add_link: bool
     show_forward_from: bool
-    include: List[str]
-    exclude: List[str]
+    include: Iterable[str]
+    exclude: Iterable[str]
 
 
 class BridgeOptionsDict(TypedDict):
-    telegram_to_mastodon: TelegramToMastodonDict
-    mastodon_to_telegram: MastodonToTelegramDict
+    """Bridge Options Dict
+    """
+    telegram_to_mastodon: TelegramToMastodonOptionsDict
+    mastodon_to_telegram: MastodonToTelegramOptionsDict
+
+
+class MastodonToTelegramOptions(NamedTuple):
+    """Mastodon To Telegram Options
+    """
+    disable: bool = False
+    channel_chat_id: int = 0
+    pm_chat_id: int = 0
+    scope: Iterable[str] = ("public", "unlisted")
+    tags: Iterable[str] = ()
+    add_link: bool = True
+    forward_reblog_link_only: bool = True
+
+
+class TelegramToMastodonOptions(NamedTuple):
+    """Telegram To Mastodon Options
+    """
+    disable: bool = False
+    channel_chat_id: int = 0
+    pm_chat_id: int = 0
+    add_link: bool = False
+    show_forward_from: bool = True
+    include: Iterable[str] = ()
+    exclude: Iterable[str] = ("#nofwd", "#noforward")

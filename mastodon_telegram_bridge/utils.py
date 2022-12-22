@@ -5,17 +5,33 @@ from markdownify import MarkdownConverter
 from mastodon import AttribAccessDict
 from telegram import Message
 
-from mastodon_telegram_bridge import MastodonToTelegramOptions, TelegramToMastodonOptions
+from mastodon_telegram_bridge.typing import MastodonToTelegramOptions, TelegramToMastodonOptions
 
 
 class TelegramMarkdownConverter(MarkdownConverter):
+    """Telegram Markdown Converter
+
+    Convert markdown to telegram markdown style
+    """
     class Options(MarkdownConverter.Options):
-        # https://core.telegram.org/bots/api#markdown-style
+        """Markdown Converter Options
+
+        Options for markdown converter
+        Reference: https://core.telegram.org/bots/api#markdown-style
+        """
         autolinks = False
         escape_brackets = True
         escape_backquote = True
 
-    def escape(self, text):
+    def escape(self, text: str) -> str:
+        """Escape some characters
+
+        Args:
+            text (str): text to escape
+
+        Returns:
+            str: escaped text 
+        """
         if not text:
             return ''
         if self.options['escape_asterisks']:
@@ -30,6 +46,9 @@ class TelegramMarkdownConverter(MarkdownConverter):
 
 
 class Footer:
+    """The footer of a message 
+    """
+
     def _forwarded_from(self, name: str) -> str:
         return f'Forwarded from {name}'
 
@@ -42,6 +61,9 @@ class Footer:
 
 
 class MastodonFooter(Footer):
+    """Footer for mastodon statuses
+    """
+
     def __init__(self, options: TelegramToMastodonOptions):
         self.options = options
 
@@ -57,7 +79,15 @@ class MastodonFooter(Footer):
     def __get_link(self, message: Message) -> str:
         return f'https://t.me/c/{str(message.chat_id)[4:]}/{message.message_id}'
 
-    def make_footer(self, message: Message) -> str:
+    def make_footer(self, message: Message) -> List[str]:
+        """generate footer
+
+        Args:
+            message (Message): the message from telegram
+
+        Returns:
+            List[str]: footer lines in list
+        """
         footer = []
         if self.options.show_forward_from:
             forward_from = self.__get_name(message)
@@ -69,10 +99,21 @@ class MastodonFooter(Footer):
 
 
 class TelegramFooter(Footer):
+    """Footer for telegram messages
+    """
+
     def __init__(self, options: MastodonToTelegramOptions):
         self.options = options
 
     def make_footer(self, status: AttribAccessDict) -> List[str]:
+        """generate footer
+
+        Args:
+            status (AttribAccessDict): the status dict from mastodon
+
+        Returns:
+            List[str]: footer lines in list
+        """
         footer = []
         if self.options.add_link:
             footer.append(status.url)
@@ -82,8 +123,24 @@ class TelegramFooter(Footer):
 
 
 def markdownify(text: str, **options) -> str:
+    """Markdownify text to telegram markdown style
+
+    Args:
+        text (str): text to convert
+
+    Returns:
+        str: converted text
+    """
     return TelegramMarkdownConverter(**options).convert(text)
 
 
 def format_exception(exc: Exception) -> str:
+    """Format exception to string
+
+    Args:
+        exc (Exception): exception to format
+
+    Returns:
+        str: formatted exception
+    """
     return ''.join(traceback.TracebackException.from_exception(exc).format())

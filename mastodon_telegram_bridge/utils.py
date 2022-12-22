@@ -5,7 +5,7 @@ from markdownify import MarkdownConverter
 from mastodon import AttribAccessDict
 from telegram import Message
 
-from mastodon_telegram_bridge.typing import MastodonToTelegramOptions, TelegramToMastodonOptions
+from mastodon_telegram_bridge.types import MastodonToTelegramOptions, TelegramToMastodonOptions
 
 
 class TelegramMarkdownConverter(MarkdownConverter):

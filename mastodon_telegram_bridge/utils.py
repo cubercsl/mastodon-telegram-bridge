@@ -1,5 +1,4 @@
-import traceback
-from typing import List
+from typing import List, Optional
 
 from betterlogging.outer.better_exceptions import ExceptionFormatter
 from markdownify import MarkdownConverter
@@ -68,17 +67,19 @@ class MastodonFooter(Footer):
     def __init__(self, options: TelegramToMastodonOptions):
         self.options = options
 
-    def __get_name(self, message: Message) -> str:
+    def __get_forward_name(self, message: Message) -> Optional[str]:
         if message.forward_from:
             return message.forward_from.name
         if message.forward_from_chat:
             return message.forward_from_chat.title
         if message.forward_sender_name:
             return message.forward_sender_name
-        return ''
-
-    def __get_link(self, message: Message) -> str:
-        return f'https://t.me/c/{str(message.chat_id)[4:]}/{message.message_id}'
+        return None
+    
+    def __get_forward_link(self, message: Message) -> Optional[str]:       
+        if message.forward_from_chat and (chat_link := message.forward_from_chat.link):
+            return f'{chat_link}/{message.forward_from_message_id}'
+        return None
 
     def make_footer(self, message: Message) -> List[str]:
         """generate footer
@@ -90,12 +91,13 @@ class MastodonFooter(Footer):
             List[str]: footer lines in list
         """
         footer = []
-        if self.options.show_forward_from:
-            forward_from = self.__get_name(message)
-            if forward_from:
+        if self.options.show_forward_from:            
+            if forward_from := self.__get_forward_name(message):
                 footer.append(self._forwarded_from(forward_from))
-        if self.options.add_link:
-            footer.append(self.__get_link(message))
+            if forward_link := self.__get_forward_link(message):
+                footer.append(forward_link)
+        if self.options.add_link and message.link is not None:
+            footer.append(message.link)
         return footer
 
 

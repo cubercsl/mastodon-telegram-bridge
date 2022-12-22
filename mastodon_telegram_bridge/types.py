@@ -1,20 +1,12 @@
 from typing import Iterable, Literal, MutableSequence, NamedTuple, Optional, TypedDict
 
-from telegram import File
-
-
-class MediaDict(NamedTuple):
-    """MediaDict
-    """
-    media_type: Literal['photo', 'video']
-    media_file: File
-    caption: Optional[str]
+from telegram import Message
 
 
 class MediaGroup(NamedTuple):
     """MediaGroup
     """
-    medias: MutableSequence[MediaDict]
+    message: MutableSequence[Message]
     footer: str
 
 

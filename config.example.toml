@@ -24,7 +24,8 @@ access_token = "ABCDEF1234567890ABCDEF1234567890ABCDEF12345"
 disable = false
 
 # channel or group chat id for messages forwarding
-# MUST be a channel, it is not supported the group chat (yet)
+# if you use a channel, the success of the forwarding will be reported to the private chat
+# if you use a group, the success of the forwarding will be reported to the group by replying to the forwarded message
 channel_chat_id = -1000000000000
 
 # private chat id for exceptions reporting

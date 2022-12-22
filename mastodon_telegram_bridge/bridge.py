@@ -4,14 +4,14 @@ from tempfile import TemporaryDirectory
 from typing import Optional, cast
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
-from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update, Video
+from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, ParseMode, Update, Video
 from telegram.ext import CallbackContext, CommandHandler, Filters, MessageHandler, Updater
 from telegram.utils.helpers import effective_message_type
 
 from mastodon_telegram_bridge.types import (BridgeOptionsDict,
                                             MastodonOptionsDict,
                                             MastodonToTelegramOptions,
-                                            MediaDict, MediaGroup,
+                                            MediaGroup,
                                             TelegramOptionsDict,
                                             TelegramToMastodonOptions)
 from mastodon_telegram_bridge.utils import MastodonFooter, TelegramFooter, format_exception, markdownify
@@ -86,9 +86,7 @@ class Bridge:
         self.mastodon_app_name: str = self.mastodon.app_verify_credentials().name
         logger.info('Username: %s, App name: %s', self.mastodon_username, self.mastodon_app_name)
 
-    def _should_forward_to_mastodon(self, msg: Optional[str]) -> bool:
-        if msg is None:
-            msg = ''
+    def _should_forward_to_mastodon(self, msg: str) -> bool:
         excluded = any(tag in msg for tag in self.telegram_to_mastodon.exclude)
         if include := self.telegram_to_mastodon.include:
             return any(tag in msg for tag in include) and not excluded
@@ -101,28 +99,34 @@ class Bridge:
             status.in_reply_to_id is None and \
             status.visibility in self.mastodon_to_telegram.scope
 
-    def _send_media_to_mastodon(self, *medias: MediaDict, footer: str, context: CallbackContext) -> None:
+    def _send_media_to_mastodon(self, *messages: Message, footer: str, context: CallbackContext) -> None:
         cfg = self.telegram_to_mastodon
         media_ids = []
-        text = medias[0].caption
+        text = messages[0].caption or ''
         if not self._should_forward_to_mastodon(text):
             logger.info('Do not forward this channel message to mastodon.')
             return
         text += '\n' + footer
-        if cnt := len(medias) > 4:
+        if cnt := len(messages) > 4:
             logger.warning('Too many medias: %d, it may not be supported by mastodon', cnt)
             return
         with TemporaryDirectory(prefix='mastodon') as tmpdir:
-            for media_type, media_file, _ in medias:
+            for message in messages:
+                media_type = effective_message_type(message)
                 if media_type not in ('photo', 'video'):
                     logger.warning('Unsupported media type: %s', media_type)
                     continue
+                media_file = message.photo[-1].get_file() \
+                    if media_type == 'photo' else cast(Video, message.effective_attachment).get_file()
                 file_path = os.path.join(tmpdir, media_file.file_unique_id)
                 media_file.download(custom_path=file_path)
                 media_ids.append(self.mastodon.media_post(file_path).id)
         status: AttribAccessDict = self.mastodon.status_post(text, visibility='public', media_ids=media_ids)
-        context.bot.send_message(
-            cfg.pm_chat_id, f'*Successfully forward message to mastodon.*\n{status.url}', parse_mode=ParseMode.MARKDOWN)
+        success_message = f'*Successfully forward message to mastodon.*\n{status.url}'
+        if messages[0].is_automatic_forward:
+            messages[0].reply_markdown(success_message)
+        else:
+            context.bot.send_message(cfg.pm_chat_id, success_message, parse_mode=ParseMode.MARKDOWN)
 
     def _media_group_sender(self, context: CallbackContext) -> None:
         cfg = self.telegram_to_mastodon
@@ -131,7 +135,7 @@ class Bridge:
                 logger.warning('No media group context.')
                 return
             context.job.context = cast(MediaGroup, context.job.context)
-            self._send_media_to_mastodon(*context.job.context.medias, footer=context.job.context.footer, context=context)
+            self._send_media_to_mastodon(*context.job.context.message, footer=context.job.context.footer, context=context)
         except Exception as exc:
             logger.exception(exc)
             context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
@@ -143,22 +147,18 @@ class Bridge:
             return
         cfg = self.telegram_to_mastodon
         if message.chat_id != cfg.channel_chat_id:
-            logger.warning('Received message from wrong channel id: %d', message.chat_id)
-            message.reply_text('This bot is only for specific channel.')
+            logger.warning('Received message from wrong chat id: %d', message.chat_id)
+            message.reply_text('This bot is only for specific channel or chat.')
             return
-        logger.info('Received channel message from channel id: %d', message.chat_id)
+        logger.info('Received channel message from chat id: %d', message.chat_id)
+        
         try:
             media_type = effective_message_type(message)
 
             if media_type in ('photo', 'video'):
                 if message.effective_attachment is None:
                     logger.warning('No effective attachment.')
-                    return
-
-                media_file = message.photo[-1].get_file() \
-                    if media_type == 'photo' else cast(Video, message.effective_attachment).get_file()
-                media_dict = MediaDict(media_file=media_file, media_type=media_type, caption=message.caption)
-
+                    return                
                 # media group will be received as multiple updates
                 # create a job to wait for all updates and send them together
                 # Reference:
@@ -170,15 +170,15 @@ class Bridge:
                         return
                     jobs = context.job_queue.get_jobs_by_name(str(message.media_group_id))
                     if jobs:
-                        cast(MediaGroup, jobs[0].context).medias.append(media_dict)
+                        cast(MediaGroup, jobs[0].context).message.append(message)
                     else:
                         footer = self.mastodon_footer(message)
                         context.job_queue.run_once(self._media_group_sender, 5,
-                                                   context=(MediaGroup(medias=[media_dict], footer=footer)),
+                                                   context=(MediaGroup(message=[message], footer=footer)),
                                                    name=str(message.media_group_id))
                 else:
                     footer = self.mastodon_footer(message)
-                    self._send_media_to_mastodon(media_dict, footer=footer, context=context)
+                    self._send_media_to_mastodon(message, footer=footer, context=context)
             elif media_type == 'text':
                 text = message.text
                 if not self._should_forward_to_mastodon(text):
@@ -187,8 +187,11 @@ class Bridge:
                 footer = self.mastodon_footer(message)
                 text += '\n' + footer
                 status: AttribAccessDict = self.mastodon.status_post(status=text, visibility='public')
-                context.bot.send_message(
-                    cfg.pm_chat_id, f'*Successfully forward message to mastodon.*\n{status.url}', parse_mode=ParseMode.MARKDOWN)
+                success_message = f'*Successfully forward message to mastodon.*\n{status.url}'
+                if message.is_automatic_forward:
+                    message.reply_markdown(success_message)
+                else:
+                    context.bot.send_message(cfg.pm_chat_id, success_message, parse_mode=ParseMode.MARKDOWN)
             else:
                 logger.info('Unsupported message type, skip it.')
         except Exception as exc:

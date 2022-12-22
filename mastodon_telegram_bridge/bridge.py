@@ -9,11 +9,11 @@ from telegram.utils.helpers import effective_message_type
 
 from mastodon_telegram_bridge import logger
 from mastodon_telegram_bridge.types import (BridgeOptionsDict,
-                                             MastodonOptionsDict,
-                                             MastodonToTelegramOptions,
-                                             MediaDict, MediaGroup,
-                                             TelegramOptionsDict,
-                                             TelegramToMastodonOptions)
+                                            MastodonOptionsDict,
+                                            MastodonToTelegramOptions,
+                                            MediaDict, MediaGroup,
+                                            TelegramOptionsDict,
+                                            TelegramToMastodonOptions)
 from mastodon_telegram_bridge.utils import MastodonFooter, TelegramFooter, format_exception, markdownify
 
 

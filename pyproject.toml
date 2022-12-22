@@ -1,23 +1,33 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "mastodon-telegram-bridge"
-version = "0.1.0"
 description = "A simple bridge between Mastodon and Telegram"
+readme = "README.md"
+requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [ { name = "cubercsl", email = "hi@cubercsl.site" } ]
+authors = [{ name = "cubercsl", email = "hi@cubercsl.site" }]
 dependencies = [
     "Mastodon.py~=1.8",
     "markdownify~=0.11",
     "python-telegram-bot~=13.15",
     "tomli~=2.0",
 ]
+dynamic = ["version"]
 
 [project.optional-dependencies]
-dev = [
-    "autopep8~=2.0",
-]
+dev = ["autopep8~=2.0"]
+
+[project.urls]
+homepage = "https://github.com/cubercsl/mastodon-telegram-bridge"
 
 [project.scripts]
 mastodon-telegram-bridge = "mastodon_telegram_bridge.main:main"
 
 [tool.autopep8]
 max_line_length = 127
+
+[tool.setuptools_scm]
+write_to = "mastodon_telegram_bridge/_version.py"

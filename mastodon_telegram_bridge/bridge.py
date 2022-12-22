@@ -8,7 +8,7 @@ from telegram.ext import CallbackContext, CommandHandler, Filters, MessageHandle
 from telegram.utils.helpers import effective_message_type
 
 from mastodon_telegram_bridge import logger
-from mastodon_telegram_bridge.typing import (BridgeOptionsDict,
+from mastodon_telegram_bridge.types import (BridgeOptionsDict,
                                              MastodonOptionsDict,
                                              MastodonToTelegramOptions,
                                              MediaDict, MediaGroup,
@@ -229,7 +229,7 @@ class Bridge:
     def _start(self, update: Update, _: CallbackContext) -> None:
         update.message.reply_text('Hi!')
 
-    def _error(self, update: Update, context: CallbackContext) -> None:
+    def _error(self, update: object, context: CallbackContext) -> None:
         logger.warning('Update "%s" caused error "%s"', update, context.error)
         logger.exception(context.error)
 

@@ -1,6 +1,6 @@
 import argparse
-import logging
 
+import betterlogging as logging
 import tomli
 
 try:
@@ -15,19 +15,18 @@ def main():
                                      description=f'A simple telegram bot bridges mastodon timeline. {__version__}')
     parser.add_argument('config', help='config file path', nargs='?', default='config.toml')
     parser.add_argument('-v', '--verbose', help='verbose mode', action='store_true')
-    parser.add_argument('-d', '--debug', help='debug mode', action='store_true')
+    parser.add_argument('-s', '--silent', help='silent mode', action='store_true')
     parser.add_argument('-V', '--version', help='show version', action='version', version=__version__)
     args = parser.parse_args()
     if args.verbose:
-        level = logging.INFO
-    elif args.debug:
         level = logging.DEBUG
-    else:
+    elif args.silent:
         level = logging.WARNING
+    else:
+        level = logging.INFO
 
-    logging.basicConfig(level=level,
-                        format='%(asctime)s: %(levelname)s %(name)s | %(message)s',
-                        handlers=[logging.StreamHandler()])
+    logging.basic_colorized_config(level=level)
+
     with open(args.config, 'rb') as cfg:
         config = tomli.load(cfg)
     Bridge(**config).run()

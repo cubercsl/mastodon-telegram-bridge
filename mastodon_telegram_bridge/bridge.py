@@ -1,3 +1,4 @@
+import logging
 import os
 from tempfile import TemporaryDirectory
 from typing import Optional, cast
@@ -7,7 +8,6 @@ from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update, V
 from telegram.ext import CallbackContext, CommandHandler, Filters, MessageHandler, Updater
 from telegram.utils.helpers import effective_message_type
 
-from mastodon_telegram_bridge import logger
 from mastodon_telegram_bridge.types import (BridgeOptionsDict,
                                             MastodonOptionsDict,
                                             MastodonToTelegramOptions,
@@ -15,6 +15,9 @@ from mastodon_telegram_bridge.types import (BridgeOptionsDict,
                                             TelegramOptionsDict,
                                             TelegramToMastodonOptions)
 from mastodon_telegram_bridge.utils import MastodonFooter, TelegramFooter, format_exception, markdownify
+
+
+logger = logging.getLogger(__name__)
 
 
 class Bridge:
@@ -199,7 +202,7 @@ class Bridge:
                     # check if it is a reblog and get the original message
                     if cfg.forward_reblog_link_only:
                         text = self.telegram_footer(status.reblog)
-                        logger.info('Sending message to telegram channel: %s', text)
+                        logger.info('Sending message to telegram channel:\n %s', text)
                         self.bot.send_message(cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
                         return
                     status = status.reblog

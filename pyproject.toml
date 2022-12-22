@@ -10,6 +10,7 @@ requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "cubercsl", email = "hi@cubercsl.site" }]
 dependencies = [
+    "betterlogging~=0.2",
     "Mastodon.py~=1.8",
     "markdownify~=0.11",
     "python-telegram-bot~=13.15",

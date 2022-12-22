@@ -1,23 +1,15 @@
 import os
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Literal, Optional, TypedDict, Tuple, cast
+from typing import Dict, List, Optional, Tuple, cast
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
-from telegram import Bot, File, InputMediaPhoto, InputMediaVideo, ParseMode, Update
+from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update
 from telegram.ext import CallbackContext, CommandHandler, Dispatcher, Filters, MessageHandler, Updater
 from telegram.utils.helpers import effective_message_type
 
 from mastodon_telegram_bridge import MastodonToTelegramOptions, TelegramToMastodonOptions, logger
+from mastodon_telegram_bridge.typing import BridgeOptionsDict, MediaDict
 from mastodon_telegram_bridge.utils import MastodonFooter, TelegramFooter, format_exception, markdownify
-
-ValueType = str | int | bool | List[str]
-OptionType = Dict[str, ValueType]
-
-
-class MediaDict(TypedDict):
-    media_type: Literal["photo", "video"]
-    media_file: File
-    caption: str
 
 
 class Bridge:
@@ -25,7 +17,7 @@ class Bridge:
     def __init__(self, *,
                  telegram: Dict[str, str],
                  mastodon: Dict[str, str],
-                 options: Optional[Dict[str, OptionType]] = None,
+                 options: Optional[BridgeOptionsDict] = None,
                  telegram_to_mastodon_options: Optional[TelegramToMastodonOptions] = None,
                  mastodon_to_telegram_options: Optional[MastodonToTelegramOptions] = None) -> None:
 
@@ -52,6 +44,11 @@ class Bridge:
         # check if both telegram_to_mastodon and mastodon_to_telegram are disabled
         if self.telegram_to_mastodon.disable and self.mastodon_to_telegram.disable:
             raise ValueError('Both telegram_to_mastodon and mastodon_to_telegram are disabled, nothing to do.')
+
+        # check if forward_reblog_link_only is enabled without add_link
+        if not self.mastodon_to_telegram.disable and not self.mastodon_to_telegram.add_link and \
+                self.mastodon_to_telegram.forward_reblog_link_only:
+            raise ValueError('forward_reblog_link_only is only valid if add_link is enabled')
 
         self.mastodon_footer = MastodonFooter(self.telegram_to_mastodon)
         self.telegram_footer = TelegramFooter(self.mastodon_to_telegram)
@@ -119,7 +116,7 @@ class Bridge:
             return
         logger.info('Received channel message from channel id: %d', message.chat_id)
         try:
-            media_type = effective_message_type(message)            
+            media_type = effective_message_type(message)
             if message.media_group_id:
                 media_file = message.photo[-1].get_file() if media_type == 'photo' else message.effective_attachment.get_file()
                 media_dict = {'media_file': media_file, 'media_type': media_type, 'caption': message.caption}
@@ -166,8 +163,8 @@ class Bridge:
                 text = markdownify(status.content)
                 if status.spoiler_text:
                     text = f'*{status.spoiler_text}*\n\n{text}'
-                text += '\n' + self.telegram_footer(status)
                 logger.info('Sending message to telegram channel: %s', text)
+                text += '\n' + self.telegram_footer(status)
                 if len(status.media_attachments) > 0:
                     medias = []
                     for item in status.media_attachments:

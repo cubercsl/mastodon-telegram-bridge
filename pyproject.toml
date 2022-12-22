@@ -11,6 +11,11 @@ dependencies = [
     "tomli~=2.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "autopep8~=2.0",
+]
+
 [project.scripts]
 mastodon-telegram-bridge = "mastodon_telegram_bridge.main:main"
 

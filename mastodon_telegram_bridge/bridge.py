@@ -86,7 +86,9 @@ class Bridge:
         self.mastodon_app_name: str = self.mastodon.app_verify_credentials().name
         logger.info('Username: %s, App name: %s', self.mastodon_username, self.mastodon_app_name)
 
-    def _should_forward_to_mastodon(self, msg: str) -> bool:
+    def _should_forward_to_mastodon(self, msg: Optional[str]) -> bool:
+        if msg is None:
+            msg = ''
         excluded = any(tag in msg for tag in self.telegram_to_mastodon.exclude)
         if include := self.telegram_to_mastodon.include:
             return any(tag in msg for tag in include) and not excluded

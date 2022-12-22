@@ -1,6 +1,7 @@
 import traceback
 from typing import List
 
+from betterlogging.outer.better_exceptions import ExceptionFormatter
 from markdownify import MarkdownConverter
 from mastodon import AttribAccessDict
 from telegram import Message
@@ -143,4 +144,4 @@ def format_exception(exc: Exception) -> str:
     Returns:
         str: formatted exception
     """
-    return ''.join(traceback.TracebackException.from_exception(exc).format())
+    return ''.join(ExceptionFormatter().format_exception(exc))

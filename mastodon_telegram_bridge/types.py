@@ -1,4 +1,4 @@
-from typing import Iterable, Literal, MutableSequence, NamedTuple, TypedDict
+from typing import Iterable, Literal, MutableSequence, NamedTuple, Optional, TypedDict
 
 from telegram import File
 
@@ -8,7 +8,7 @@ class MediaDict(NamedTuple):
     """
     media_type: Literal['photo', 'video']
     media_file: File
-    caption: str
+    caption: Optional[str]
 
 
 class MediaGroup(NamedTuple):

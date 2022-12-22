@@ -1,5 +1,4 @@
-from typing import NamedTuple, Literal, Iterable, TypedDict
-
+from typing import Iterable, Literal, MutableSequence, NamedTuple, TypedDict
 
 from telegram import File
 
@@ -15,7 +14,7 @@ class MediaDict(NamedTuple):
 class MediaGroup(NamedTuple):
     """MediaGroup
     """
-    medias: Iterable[MediaDict]
+    medias: MutableSequence[MediaDict]
     footer: str
 
 

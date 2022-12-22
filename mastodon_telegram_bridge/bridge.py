@@ -1,10 +1,10 @@
 import os
 from tempfile import TemporaryDirectory
-from typing import List, Optional, cast
+from typing import Optional, cast
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
-from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update
-from telegram.ext import CallbackContext, CommandHandler, Dispatcher, Filters, MessageHandler, Updater
+from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update, Video
+from telegram.ext import CallbackContext, CommandHandler, Filters, MessageHandler, Updater
 from telegram.utils.helpers import effective_message_type
 
 from mastodon_telegram_bridge import logger
@@ -96,7 +96,7 @@ class Bridge:
             status.in_reply_to_id is None and \
             status.visibility in self.mastodon_to_telegram.scope
 
-    def _send_media_to_mastodon(self, medias: List[MediaDict], footer: str, context: CallbackContext) -> None:
+    def _send_media_to_mastodon(self, *medias: MediaDict, footer: str, context: CallbackContext) -> None:
         cfg = self.telegram_to_mastodon
         media_ids = []
         text = medias[0].caption
@@ -122,14 +122,20 @@ class Bridge:
     def _media_group_sender(self, context: CallbackContext) -> None:
         cfg = self.telegram_to_mastodon
         try:
+            if context.job is None:
+                logger.warning('No media group context.')
+                return
             context.job.context = cast(MediaGroup, context.job.context)
-            self._send_media_to_mastodon(context.job.context.medias, context.job.context.footer, context)
+            self._send_media_to_mastodon(*context.job.context.medias, footer=context.job.context.footer, context=context)
         except Exception as exc:
             logger.exception(exc)
             context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
 
     def _send_message_to_mastodon(self, update: Update, context: CallbackContext) -> None:
         message = update.effective_message
+        if message is None:
+            logger.warning('No effective message.')
+            return
         cfg = self.telegram_to_mastodon
         if message.chat_id != cfg.channel_chat_id:
             logger.warning('Received message from wrong channel id: %d', message.chat_id)
@@ -138,25 +144,36 @@ class Bridge:
         logger.info('Received channel message from channel id: %d', message.chat_id)
         try:
             media_type = effective_message_type(message)
-            # media group will be received as multiple updates
-            # create a job to wait for all updates and send them together
-            # Reference:
-            #   https://github.com/Poolitzer/channelforwarder/blob/589104b8a808199ba46d620736bd8bea1dc187d9/main.py#L35-L45
-            if message.media_group_id:
-                media_file = message.photo[-1].get_file() if media_type == 'photo' else message.effective_attachment.get_file()
+
+            if media_type in ('photo', 'video'):
+                if message.effective_attachment is None:
+                    logger.warning('No effective attachment.')
+                    return
+
+                media_file = message.photo[-1].get_file() \
+                    if media_type == 'photo' else cast(Video, message.effective_attachment).get_file()
                 media_dict = MediaDict(media_file=media_file, media_type=media_type, caption=message.caption)
-                jobs = context.job_queue.get_jobs_by_name(str(message.media_group_id))
-                if jobs:
-                    cast(MediaGroup, jobs[0].context).medias.append(media_dict)
+
+                # media group will be received as multiple updates
+                # create a job to wait for all updates and send them together
+                # Reference:
+                #   https://github.com/Poolitzer/channelforwarder/blob/589104b8a808199ba46d620736bd8bea1dc187d9/main.py#L35-L45
+
+                if message.media_group_id:
+                    if context.job_queue is None:
+                        logger.error('Cannot get job queue in the context. Ignore this message.')
+                        return
+                    jobs = context.job_queue.get_jobs_by_name(str(message.media_group_id))
+                    if jobs:
+                        cast(MediaGroup, jobs[0].context).medias.append(media_dict)
+                    else:
+                        footer = self.mastodon_footer(message)
+                        context.job_queue.run_once(self._media_group_sender, 5,
+                                                   context=(MediaGroup(medias=[media_dict], footer=footer)),
+                                                   name=str(message.media_group_id))
                 else:
                     footer = self.mastodon_footer(message)
-                    context.job_queue.run_once(self._media_group_sender, 5,
-                                               context=(MediaGroup(medias=[media_dict], footer=footer)),
-                                               name=str(message.media_group_id))
-            elif media_type in ('photo', 'video'):
-                media_file = message.photo[-1].get_file() if media_type == 'photo' else message.effective_attachment.get_file()
-                media_dict = MediaDict(media_file=media_file, media_type=media_type, caption=message.caption)
-                self._send_media_to_mastodon([media_dict], footer, context)
+                    self._send_media_to_mastodon(media_dict, footer=footer, context=context)
             elif media_type == 'text':
                 text = message.text
                 if not self._should_forward_to_mastodon(text):
@@ -192,7 +209,7 @@ class Bridge:
                 logger.info('Sending message to telegram channel: %s', text)
                 text += '\n' + self.telegram_footer(status)
                 if len(status.media_attachments) > 0:
-                    medias = []
+                    medias: list[InputMediaPhoto | InputMediaVideo] = []
                     for item in status.media_attachments:
                         if item.type == 'image':
                             medias.append(InputMediaPhoto(item.url, parse_mode=ParseMode.MARKDOWN))
@@ -228,7 +245,7 @@ class Bridge:
 
         # Telegram bot
         updater = Updater(bot=self.bot, use_context=True)
-        dispatcher: Dispatcher = updater.dispatcher
+        dispatcher = updater.dispatcher
         dispatcher.add_error_handler(self._error)
         dispatcher.add_handler(CommandHandler('start', self._start))
         if not self.telegram_to_mastodon.disable:

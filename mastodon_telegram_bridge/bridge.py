@@ -1,31 +1,47 @@
+import os
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional, TypedDict, Tuple, cast
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
-from telegram import Bot, InputMediaPhoto, InputMediaVideo, ParseMode, Update
+from telegram import Bot, File, InputMediaPhoto, InputMediaVideo, ParseMode, Update
 from telegram.ext import CallbackContext, CommandHandler, Dispatcher, Filters, MessageHandler, Updater
+from telegram.utils.helpers import effective_message_type
 
-from mastodon_telegram_bridge import BridgeOptions, MastodonToTelegramOptions, TelegramToMastodonOptions, logger
+from mastodon_telegram_bridge import MastodonToTelegramOptions, TelegramToMastodonOptions, logger
 from mastodon_telegram_bridge.utils import MastodonFooter, TelegramFooter, format_exception, markdownify
 
 ValueType = str | int | bool | List[str]
 OptionType = Dict[str, ValueType]
 
 
+class MediaDict(TypedDict):
+    media_type: Literal["photo", "video"]
+    media_file: File
+    caption: str
+
+
 class Bridge:
+
     def __init__(self, *,
                  telegram: Dict[str, str],
                  mastodon: Dict[str, str],
-                 options: Dict[str, OptionType] | Dict[str, BridgeOptions]) -> None:
-        if isinstance(options, BridgeOptions):
-            self.mastodon_to_telegram = options['mastodon_to_telegram']
-            self.telegram_to_mastodon = options['telegram_to_mastodon']
-        else:
+                 options: Optional[Dict[str, OptionType]] = None,
+                 telegram_to_mastodon_options: Optional[TelegramToMastodonOptions] = None,
+                 mastodon_to_telegram_options: Optional[MastodonToTelegramOptions] = None) -> None:
+
+        if options is not None:
+            if telegram_to_mastodon_options is not None or mastodon_to_telegram_options is not None:
+                raise ValueError('options and telegram_to_mastodon_options/mastodon_to_telegram_options are mutually exclusive')
             self.mastodon_to_telegram = MastodonToTelegramOptions(**options['mastodon_to_telegram'])
             self.telegram_to_mastodon = TelegramToMastodonOptions(**options['telegram_to_mastodon'])
+        else:
+            if telegram_to_mastodon_options is None or mastodon_to_telegram_options is None:
+                raise ValueError('options or telegram_to_mastodon_options/mastodon_to_telegram_options must be provided')
+            self.mastodon_to_telegram = mastodon_to_telegram_options
+            self.telegram_to_mastodon = telegram_to_mastodon_options
 
-        logger.info('mastodon_to_telegram: %s ', self.mastodon_to_telegram)
-        logger.info('telegram_to_mastodon: %s ', self.telegram_to_mastodon)
+        logger.info(self.mastodon_to_telegram)
+        logger.info(self.telegram_to_mastodon)
         # check if the tags start with #
         for tags in (self.telegram_to_mastodon.include,
                      self.telegram_to_mastodon.exclude,
@@ -53,7 +69,7 @@ class Bridge:
         if include := self.telegram_to_mastodon.include:
             return any(tag in msg for tag in include) and not excluded
         return not excluded
-            
+
     def _should_forward_to_telegram(self, status: AttribAccessDict) -> bool:
         # check if the message is from the telegram channel or another app
         return status.account.username == self.mastodon_username and \
@@ -61,55 +77,78 @@ class Bridge:
             status.in_reply_to_id is None and \
             status.visibility in self.mastodon_to_telegram.scope
 
-    def _send_message_to_mastodon(self, update: Update, context: CallbackContext) -> None:
-        channel_post = update.channel_post
-        cfg = self.telegram_to_mastodon
-        if channel_post.chat_id != cfg.channel_chat_id:
-            logger.warning('Received message from wrong channel id: %d', channel_post.chat_id)
-            channel_post.reply_text('This bot is only for specific channel.')
-            return
-        logger.info('Received channel message from channel id: %d', channel_post.chat_id)
+    def _send_media_to_mastodon(self, medias: List[MediaDict], footer: str, context: CallbackContext) -> None:
         try:
-            media_ids = None
-            text = ''
-
-            if channel_post.photo:
-                if channel_post.media_group_id:
-                    # TODO: support media group
-                    logger.info('This is a media group. Skip it.')
-                    return
-                with TemporaryDirectory(prefix='mastodon') as tmpdir:
-                    text = channel_post.caption or ''
-                    if not self._should_forward_to_mastodon(text):
-                        logger.info('Do not forward this channel message to mastodon.')
-                        return
-                    file_path = f'{tmpdir}/{channel_post.photo[-1].file_unique_id}'
-                    channel_post.photo[-1].get_file().download(custom_path=file_path)
-                    media_ids = self.mastodon.media_post(file_path).id
-            elif channel_post.video:
-                with TemporaryDirectory(prefix='mastodon') as tmpdir:
-                    text = channel_post.caption or ''
-                    if not self._should_forward_to_mastodon(text):
-                        logger.info('Do not forward this channel message to mastodon.')
-                        return
-                    file_path = f'{tmpdir}/{channel_post.video.file_name}'
-                    channel_post.video.get_file().download(custom_path=file_path)
-                    media_ids = self.mastodon.media_post(file_path).id
-            elif channel_post.text:
-                text = channel_post.text
-                if not self._should_forward_to_mastodon(text):
-                    logger.info('Do not forward this channel message to mastodon.')
-                    return
-            else:
-                logger.info('Unsupported message type, skip it.')
+            cfg = self.telegram_to_mastodon
+            media_ids = []
+            text = medias[0]['caption']
+            if not self._should_forward_to_mastodon(text):
+                logger.info('Do not forward this channel message to mastodon.')
                 return
-            text += '\n' + self.mastodon_footer(channel_post)
-            status: AttribAccessDict = self.mastodon.status_post(status=text, visibility='public', media_ids=media_ids)
+            text += '\n' + footer
+            if cnt := len(medias) > 4:
+                logger.warning('Too many medias: %d, it may not be supported by mastodon', cnt)
+                return
+            with TemporaryDirectory(prefix='mastodon') as tmpdir:
+                for media_dict in medias:
+                    media_type = media_dict['media_type']
+                    if media_type not in ('photo', 'video'):
+                        logger.warning('Unsupported media type: %s', media_type)
+                        continue
+                    media_file = media_dict['media_file']
+                    file_path = os.path.join(tmpdir, media_file.file_unique_id)
+                    media_file.download(custom_path=file_path)
+                    media_ids.append(self.mastodon.media_post(file_path).id)
+            status: AttribAccessDict = self.mastodon.status_post(text, visibility='public', media_ids=media_ids)
             context.bot.send_message(
                 cfg.pm_chat_id, f'*Successfully forward message to mastodon.*\n{status.url}', parse_mode=ParseMode.MARKDOWN)
         except Exception as exc:
             logger.exception(exc)
-            context.bot.send_message(cfg.pm_chat_id, f'```{format_exception(exc)}```', parse_mode=ParseMode.MARKDOWN)
+            context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
+
+    def _media_group_sender(self, context: CallbackContext) -> None:
+        context.job.context = cast(Tuple[List[MediaDict], str], context.job.context)
+        self._send_media_to_mastodon(*context.job.context, context)
+
+    def _send_message_to_mastodon(self, update: Update, context: CallbackContext) -> None:
+        message = update.effective_message
+        cfg = self.telegram_to_mastodon
+        if message.chat_id != cfg.channel_chat_id:
+            logger.warning('Received message from wrong channel id: %d', message.chat_id)
+            message.reply_text('This bot is only for specific channel.')
+            return
+        logger.info('Received channel message from channel id: %d', message.chat_id)
+        try:
+            media_type = effective_message_type(message)            
+            if message.media_group_id:
+                media_file = message.photo[-1].get_file() if media_type == 'photo' else message.effective_attachment.get_file()
+                media_dict = {'media_file': media_file, 'media_type': media_type, 'caption': message.caption}
+                jobs = context.job_queue.get_jobs_by_name(str(message.media_group_id))
+                if jobs:
+                    jobs[0].context[0].append(media_dict)
+                else:
+                    footer = self.mastodon_footer(message)
+                    context.job_queue.run_once(self._media_group_sender, 5, context=([media_dict], footer),
+                                               name=str(message.media_group_id))
+            elif media_type in ('photo', 'video'):
+                media_file = message.photo[-1].get_file() if media_type == 'photo' else message.effective_attachment.get_file()
+                media_dict = {'media_file': media_file, 'media_type': media_type, 'caption': message.caption}
+                self._send_media_to_mastodon([media_dict], footer, context)
+            elif media_type == 'text':
+                text = message.text
+                if not self._should_forward_to_mastodon(text):
+                    logger.info('Do not forward this channel message to mastodon.')
+                    return
+                footer = self.mastodon_footer(message)
+                text += '\n' + footer
+                status: AttribAccessDict = self.mastodon.status_post(status=text, visibility='public')
+                context.bot.send_message(
+                    cfg.pm_chat_id, f'*Successfully forward message to mastodon.*\n{status.url}', parse_mode=ParseMode.MARKDOWN)
+            else:
+                logger.info('Unsupported message type, skip it.')
+        except Exception as exc:
+            logger.exception(exc)
+            context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
 
     def _send_message_to_telegram(self, status: AttribAccessDict) -> None:
         cfg = self.mastodon_to_telegram
@@ -145,7 +184,7 @@ class Bridge:
                                           parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
         except Exception as exc:
             logger.exception(exc)
-            self.bot.send_message(cfg.pm_chat_id, f'```{format_exception(exc)}```', parse_mode=ParseMode.MARKDOWN)
+            self.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
 
     def _start(self, update: Update, context: CallbackContext) -> None:
         update.message.reply_text('Hi!')

@@ -60,9 +60,9 @@ class MastodonFooter(Footer):
     def make_footer(self, message: Message) -> str:
         footer = []
         if self.options.show_forward_from:
-            forwarded_from = self.__get_name(message)
-            if forwarded_from:
-                footer.append(self._forwarded_from(forwarded_from))
+            forward_from = self.__get_name(message)
+            if forward_from:
+                footer.append(self._forwarded_from(forward_from))
         if self.options.add_link:
             footer.append(self.__get_link(message))
         return footer

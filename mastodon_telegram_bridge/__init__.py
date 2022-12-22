@@ -33,13 +33,13 @@ class TelegramToMastodonOptions(BridgeOptions):
                  channel_chat_id: int = 0,
                  pm_chat_id: int = 0,
                  add_link: bool = False,
-                 show_forwarded_from: bool = True,
+                 show_forward_from: bool = True,
                  include: Iterable[str] = (),
                  exclude: Iterable[str] = ("#nofwd", "#noforward")):
         self.disable: bool = disable
         self.channel_chat_id: int = channel_chat_id
         self.pm_chat_id: int = pm_chat_id
         self.add_link: bool = add_link
-        self.show_forwarded_from: bool = show_forwarded_from
+        self.show_forward_from: bool = show_forward_from
         self.include: List[str] = list(include)
         self.exclude: List[str] = list(exclude)

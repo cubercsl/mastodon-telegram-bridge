@@ -35,7 +35,7 @@ access_token = "ABCDEF1234567890ABCDEF1234567890ABCDEF12345"
   add_link = false
 
   # whether to show the original post author
-  show_forwarded_from = true
+  show_forward_from = true
 
   # optional, filters for messages forwarding
   # if the message contains any of the tags, it will be forwarded, otherwise ignored

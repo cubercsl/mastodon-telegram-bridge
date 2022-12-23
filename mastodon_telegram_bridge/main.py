@@ -17,6 +17,7 @@ def main():
     parser.add_argument('-v', '--verbose', help='verbose mode', action='store_true')
     parser.add_argument('-s', '--silent', help='silent mode', action='store_true')
     parser.add_argument('-V', '--version', help='show version', action='version', version=__version__)
+    parser.add_argument('--dry-run', help='dry run', action='store_true')
     args = parser.parse_args()
     if args.verbose:
         level = logging.DEBUG
@@ -29,7 +30,11 @@ def main():
 
     with open(args.config, 'rb') as cfg:
         config = tomli.load(cfg)
-    Bridge(**config).run()
+    bridge = Bridge(**config)
+    if not args.dry_run:
+        bridge.run()
+    else:
+        logging.info('dry run, exit')
 
 
 if __name__ == '__main__':

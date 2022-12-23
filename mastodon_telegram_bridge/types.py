@@ -1,5 +1,4 @@
-from typing import Iterable, Literal, MutableSequence, NamedTuple, Optional, TypedDict
-
+from typing import Any, Dict, Iterable, MutableSequence, NamedTuple, TypedDict, Type
 from telegram import Message
 
 
@@ -8,6 +7,13 @@ class MediaGroup(NamedTuple):
     """
     message: MutableSequence[Message]
     footer: str
+
+
+# Options Dict Types loaded from config.toml
+class OptionsDict(TypedDict):
+    """Options Dict
+    """
+    pass
 
 
 class TelegramOptionsDict(TypedDict):
@@ -23,16 +29,42 @@ class MastodonOptionsDict(TypedDict):
     access_token: str
 
 
+class MastodonToTelegramFilterOptionsDict(TypedDict):
+    """Mastodon To Telegram Filter Options Dict
+    """
+    scope: Iterable[str]
+
+
+class MastodonToTelegramFooterOptionsDict(TypedDict):
+    """Mastodon To Telegram Footer Options Dict
+    """
+    add_link: bool
+    tags: Iterable[str]
+
+
 class MastodonToTelegramOptionsDict(TypedDict):
     """Mastodon To Telegram Options Dict
     """
     disable: bool
     channel_chat_id: int
     pm_chat_id: int
-    scope: Iterable[str]
-    tags: Iterable[str]
-    add_link: bool
     forward_reblog_link_only: bool
+    filter: OptionsDict
+    footer: OptionsDict
+
+
+class TelegramToMastodonFooterOptionsDict(TypedDict):
+    """Telegram To Mastodon Footer Options Dict
+    """
+    add_link: bool
+    show_forward_from: bool
+
+
+class TelegramToMastodonFilterOptionsDict(TypedDict):
+    """Telegram To Mastodon Filter Options Dict
+    """
+    include: Iterable[str]
+    exclude: Iterable[str]
 
 
 class TelegramToMastodonOptionsDict(TypedDict):
@@ -41,10 +73,8 @@ class TelegramToMastodonOptionsDict(TypedDict):
     disable: bool
     channel_chat_id: int
     pm_chat_id: int
-    add_link: bool
-    show_forward_from: bool
-    include: Iterable[str]
-    exclude: Iterable[str]
+    filter: OptionsDict
+    footer: OptionsDict
 
 
 class BridgeOptionsDict(TypedDict):
@@ -54,16 +84,23 @@ class BridgeOptionsDict(TypedDict):
     mastodon_to_telegram: MastodonToTelegramOptionsDict
 
 
+# Bridge Options
+
+
 class MastodonToTelegramOptions(NamedTuple):
     """Mastodon To Telegram Options
     """
     disable: bool = False
     channel_chat_id: int = 0
     pm_chat_id: int = 0
-    scope: Iterable[str] = ("public", "unlisted")
-    tags: Iterable[str] = ()
-    add_link: bool = True
     forward_reblog_link_only: bool = True
+    filter: OptionsDict = MastodonToTelegramFilterOptionsDict(
+        scope=["public", "unlisted"],
+    )
+    footer: OptionsDict = MastodonToTelegramFooterOptionsDict(
+        add_link=True,
+        tags=["#mastodon"],
+    )
 
 
 class TelegramToMastodonOptions(NamedTuple):
@@ -72,7 +109,11 @@ class TelegramToMastodonOptions(NamedTuple):
     disable: bool = False
     channel_chat_id: int = 0
     pm_chat_id: int = 0
-    add_link: bool = False
-    show_forward_from: bool = True
-    include: Iterable[str] = ()
-    exclude: Iterable[str] = ("#nofwd", "#noforward")
+    filter: OptionsDict = TelegramToMastodonFilterOptionsDict(
+        include=[],
+        exclude=["#nofwd", "#noforward", "#mastodon"],
+    )
+    footer: OptionsDict = TelegramToMastodonFooterOptionsDict(
+        add_link=False,
+        show_forward_from=True,
+    )

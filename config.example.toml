@@ -32,12 +32,8 @@ channel_chat_id = -1000000000000
 # you should create a private chat with the bot using /start command
 pm_chat_id = 0
 
-# whether to add a link to the original post
-add_link = false
 
-# whether to show the original post author
-show_forward_from = true
-
+[options.telegram_to_mastodon.filter]
 # optional, filters for messages forwarding
 # if the message contains any of the tags, it will be forwarded, otherwise ignored
 # espacially, if include is empty, all messages will be forwarded
@@ -47,6 +43,15 @@ include = []
 # optional, filters for messages forwarding
 # if the message contains any of the tags, it will be ignored, otherwise forwarded
 exclude = ["#nofwd", "#noforward", "#mastodon"]
+
+
+[options.telegram_to_mastodon.footer]
+# whether to add a link to the original post
+add_link = false
+
+# whether to show the original post author
+show_forward_from = true
+
 
 [options.mastodon_to_telegram]
 # whether to forward messages from mastodon to telegram
@@ -60,14 +65,23 @@ channel_chat_id = -1000000000000
 # can be different from the one used for telegram_to_mastodon
 pm_chat_id = 0
 
+# if true, will forward only the link to the original post
+# please note that the link will be added to the footer, so add_link in footer should be true
+# and the original post should be public or the link can not be accessed by others
+forward_reblog_link_only = true
+
+
+[options.mastodon_to_telegram.filter]
 # the scope should be forward to telegram
+# if the status is a reblog, the scope of the original post WON'T be checked by this filter
 scope = ["public", "unlisted"]
 
-# optional, additional tags to add to the message
-tags = ["#mastodon"]
+# if you want to check the scope of the original post, use a custom filter to check it
+# reblogged_scope = ["public", "unlisted"]
 
+[options.mastodon_to_telegram.footer]
 # whether to add a link to the original post
 add_link = true
 
-# if true, will forward only the link to the original post
-forward_reblog_link_only = true
+# optional, additional tags to add to the message
+tags = ["#mastodon"]

@@ -1,16 +1,19 @@
 import argparse
+from typing import cast
 
 import betterlogging as logging
 import tomli
+
 
 try:
     from mastodon_telegram_bridge._version import __version__
 except ImportError:
     __version__ = 'unknown'
 from mastodon_telegram_bridge.bridge import Bridge
+from mastodon_telegram_bridge.types import ConfigDict
 
 
-def main():
+def main(**kwargs) -> None:
     parser = argparse.ArgumentParser('mastodon-telegram-bridge',
                                      description=f'A simple telegram bot bridges mastodon timeline. {__version__}')
     parser.add_argument('config', help='config file path', nargs='?', default='config.toml')
@@ -29,12 +32,9 @@ def main():
     logging.basic_colorized_config(level=level)
 
     with open(args.config, 'rb') as cfg:
-        config = tomli.load(cfg)
-    bridge = Bridge(**config)
-    if not args.dry_run:
-        bridge.run()
-    else:
-        logging.info('dry run, exit')
+        config = cast(ConfigDict, tomli.load(cfg))
+    bridge = Bridge(**config, **kwargs)
+    bridge.run(dry_run=args.dry_run)
 
 
 if __name__ == '__main__':

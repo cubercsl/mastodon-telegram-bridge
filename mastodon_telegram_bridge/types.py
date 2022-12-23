@@ -1,6 +1,9 @@
-from typing import Iterable, MutableSequence, NamedTuple, TypedDict
+from typing import Iterable, MutableSequence, NamedTuple, Type, TypedDict
 
 from telegram import Message
+
+from mastodon_telegram_bridge.filter import Filter
+from mastodon_telegram_bridge.footer import Footer
 
 
 class MediaGroup(NamedTuple):
@@ -10,11 +13,19 @@ class MediaGroup(NamedTuple):
     footer: str
 
 
-# Options Dict Types loaded from config.toml
 class OptionsDict(TypedDict):
     """Options Dict
     """
     pass
+
+
+class CustomArgs(TypedDict, total=False):
+    """Custom Args
+    """
+    mastodon_filter: Type[Filter]
+    mastodon_footer: Type[Footer]
+    telegram_filter: Type[Filter]
+    telegram_footer: Type[Footer]
 
 
 class TelegramOptionsDict(TypedDict):
@@ -83,6 +94,15 @@ class BridgeOptionsDict(TypedDict):
     """
     telegram_to_mastodon: TelegramToMastodonOptionsDict
     mastodon_to_telegram: MastodonToTelegramOptionsDict
+
+
+# Config Dict Types loaded from config.toml
+class ConfigDict(TypedDict):
+    """Options Dict
+    """
+    telegram: TelegramOptionsDict
+    mastodon: MastodonOptionsDict
+    options: BridgeOptionsDict
 
 
 # Bridge Options

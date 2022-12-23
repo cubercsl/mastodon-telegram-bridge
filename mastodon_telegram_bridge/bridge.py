@@ -1,7 +1,7 @@
 import logging
 import os
 from tempfile import TemporaryDirectory
-from typing import Optional, Type, cast
+from typing import Type, cast
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
 from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, ParseMode, Update, Video
@@ -218,10 +218,13 @@ class Bridge:
         logger.warning('Update "%s" caused error "%s"', update, context.error)
         logger.exception(context.error)
 
-    def run(self) -> None:
+    def run(self, dry_run: bool) -> None:
         """Run the bridge.
         """
         # Mastodon stream
+        if dry_run:
+            logger.info('Skip running, because it is a dry run.')
+            return
         if not self.mastodon_to_telegram.disable:
             listener = CallbackStreamListener(update_handler=self._send_message_to_telegram)
             self.mastodon.stream_user(listener=listener, run_async=True)

@@ -1,4 +1,5 @@
-from typing import Any, Dict, Iterable, MutableSequence, NamedTuple, TypedDict, Type
+from typing import Iterable, MutableSequence, NamedTuple, TypedDict
+
 from telegram import Message
 
 

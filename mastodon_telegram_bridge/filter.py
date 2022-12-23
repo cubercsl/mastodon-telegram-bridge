@@ -40,14 +40,14 @@ class Filter:
             bool: True if message should can be forwarded
         """
         raise NotImplementedError
-    
+
     @classmethod
     def from_dict(cls, config: dict) -> 'Filter':
         """Create a filter from dict
 
         Args:
             config (dict): config
-        
+
         Returns:
             Filter: the filter
 
@@ -55,7 +55,6 @@ class Filter:
             ValueError: if config is invalid
         """
         return cls(**config)
-
 
 
 class MastodonFilter(Filter):

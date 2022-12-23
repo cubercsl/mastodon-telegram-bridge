@@ -1,5 +1,5 @@
 
-from typing import Iterable, List, Optional
+from typing import Iterable, Optional
 
 from mastodon import AttribAccessDict
 from telegram import Message
@@ -14,7 +14,7 @@ class Footer:
 
     Example:
         >>> class MyFooter(Footer):
-        ...     def make_footer(self, message: Message) -> List[str]:
+        ...     def make_footer(self, message: Message) -> list[str]:
         ...        return [f'This is a footer for {message.id}', f'From {message.from_user.name}', f'Link: {message.link}']
         >>> footer = MyFooter()
         >>> footer(Message(id=1, from_user=User(name='foo'), link='https://example.com/1'))
@@ -29,7 +29,7 @@ class Footer:
     def _forwarded_from(self, name: str) -> str:
         return f'Forwarded from {name}'
 
-    def make_footer(self, _: Message | AttribAccessDict) -> List[str]:
+    def make_footer(self, _: Message | AttribAccessDict) -> list[str]:
         raise NotImplementedError
 
     def __call__(self, message: Message | AttribAccessDict) -> str:
@@ -59,7 +59,7 @@ class MastodonFooter(Footer):
             return f'{chat_link}/{message.forward_from_message_id}'
         return None
 
-    def make_footer(self, message: Message) -> List[str]:
+    def make_footer(self, message: Message) -> list[str]:
         """generate footer
 
         Args:
@@ -87,7 +87,7 @@ class TelegramFooter(Footer):
         self.add_link = add_link
         self.tags = tags
 
-    def make_footer(self, status: AttribAccessDict) -> List[str]:
+    def make_footer(self, status: AttribAccessDict) -> list[str]:
         """generate footer
 
         Args:

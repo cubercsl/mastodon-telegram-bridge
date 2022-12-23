@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "mastodon-telegram-bridge"
 description = "A simple bridge between Mastodon and Telegram"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "cubercsl", email = "hi@cubercsl.site" }]
 dependencies = [

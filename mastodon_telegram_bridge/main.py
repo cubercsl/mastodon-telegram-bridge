@@ -5,12 +5,9 @@ import betterlogging as logging
 import tomli
 
 
-try:
-    from mastodon_telegram_bridge._version import __version__
-except ImportError:
-    __version__ = 'unknown'
-from mastodon_telegram_bridge.bridge import Bridge
-from mastodon_telegram_bridge.types import ConfigDict
+from ._version import __version__
+from .bridge import Bridge
+from .typing import ConfigDict
 
 
 def main(**kwargs) -> None:

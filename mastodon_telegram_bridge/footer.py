@@ -86,6 +86,15 @@ class TelegramFooter(Footer):
     def __init__(self, *, add_link: bool, tags: Iterable[str]):
         self.add_link = add_link
         self.tags = tags
+        self.__check_tags()
+
+    def __check_tags(self) -> None:
+        if not isinstance(self.tags, Iterable):
+            raise TypeError(f'tags must be an iterable, got {type(self.tags)}')
+        if not all(isinstance(tag, str) for tag in self.tags):
+            raise TypeError(f'tags must be an iterable of str, got {type(self.tags)}')
+        if not all(tag.startswith('#') for tag in self.tags):
+            raise ValueError(f'tags must start with #, got {self.tags}')
 
     def make_footer(self, status: AttribAccessDict) -> list[str]:
         """generate footer

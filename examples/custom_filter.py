@@ -5,8 +5,8 @@ from typing import Iterable
 
 from mastodon import AttribAccessDict
 
-from mastodon_telegram_bridge.main import main
-from mastodon_telegram_bridge.filter import Filter
+from mastodon_telegram_bridge import Filter, custom_bridge
+
 
 class ReblogFilter(Filter):
     def __init__(self, *, scope: Iterable[str], rebloged_scope: Iterable[str]):
@@ -18,7 +18,9 @@ class ReblogFilter(Filter):
             return False
         if status['reblog'] and status['reblog']['visibility'] not in self.rebloged_scope:
             return False
-        return True
+        return status.in_reply_to_id is None and \
+            status.visibility in self.scope
+
 
 if __name__ == '__main__':
-    main(telegram_filter=ReblogFilter)
+    custom_bridge(telegram_filter=ReblogFilter)

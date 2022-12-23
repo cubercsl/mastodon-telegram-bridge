@@ -2,8 +2,8 @@ from typing import Iterable, MutableSequence, NamedTuple, Type, TypedDict
 
 from telegram import Message
 
-from mastodon_telegram_bridge.filter import Filter
-from mastodon_telegram_bridge.footer import Footer
+from .filter import Filter
+from .footer import Footer
 
 
 class MediaGroup(NamedTuple):
@@ -98,7 +98,7 @@ class BridgeOptionsDict(TypedDict):
 
 # Config Dict Types loaded from config.toml
 class ConfigDict(TypedDict):
-    """Options Dict
+    """Config Dict
     """
     telegram: TelegramOptionsDict
     mastodon: MastodonOptionsDict
@@ -116,11 +116,11 @@ class MastodonToTelegramOptions(NamedTuple):
     pm_chat_id: int = 0
     forward_reblog_link_only: bool = True
     filter: OptionsDict = MastodonToTelegramFilterOptionsDict(
-        scope=["public", "unlisted"],
+        scope=['public', 'unlisted'],
     )
     footer: OptionsDict = MastodonToTelegramFooterOptionsDict(
         add_link=True,
-        tags=["#mastodon"],
+        tags=['#mastodon'],
     )
 
 
@@ -132,7 +132,7 @@ class TelegramToMastodonOptions(NamedTuple):
     pm_chat_id: int = 0
     filter: OptionsDict = TelegramToMastodonFilterOptionsDict(
         include=[],
-        exclude=["#nofwd", "#noforward", "#mastodon"],
+        exclude=['#nofwd', '#noforward', '#mastodon'],
     )
     footer: OptionsDict = TelegramToMastodonFooterOptionsDict(
         add_link=False,

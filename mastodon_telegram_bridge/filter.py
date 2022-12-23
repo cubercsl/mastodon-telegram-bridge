@@ -64,15 +64,22 @@ class MastodonFilter(Filter):
         self.exclude = exclude
         self.__check_tags()
 
-    def __check_tags(self):
-        if self.include and self.exclude:
-            for tag in self.include:
-                if tag in self.exclude:
-                    raise ValueError(f'include and exclude tags overlap: {tag}')
-        if self.include and any(not tag.startswith('#') for tag in self.include):
-            raise ValueError('include tags must start with #')
-        if self.exclude and any(not tag.startswith('#') for tag in self.exclude):
-            raise ValueError('exclude tags must start with #')
+    def __check_tags(self) -> None  :
+        if not isinstance(self.include, Iterable):
+            raise ValueError(f'include must be an iterable, got: {type(self.include)}')
+        if not isinstance(self.exclude, Iterable):
+            raise ValueError(f'exclude must be an iterable, got: {type(self.exclude)}')
+        if not all(isinstance(tag, str) for tag in self.include):
+            raise ValueError(f'include tags must be strings, got: {type(self.include)}')
+        if not all(isinstance(tag, str) for tag in self.exclude):
+            raise ValueError(f'exclude tags must be strings, got: {type(self.exclude)}')
+        for tag in self.include:
+            if tag in self.exclude:
+                raise ValueError(f'include and exclude tags overlap: {tag}')
+        if not all(tag.startswith('#') for tag in self.include):
+            raise ValueError(f'include tags must start with #, got: {self.include}')
+        if not all(tag.startswith('#') for tag in self.exclude):
+            raise ValueError(f'exclude tags must start with #, got: {self.exclude}')
 
     def __call__(self, text: str) -> bool:
         excluded = any(tag in text for tag in self.exclude)

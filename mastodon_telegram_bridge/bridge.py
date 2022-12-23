@@ -8,11 +8,11 @@ from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, ParseMode, 
 from telegram.ext import CallbackContext, CommandHandler, Filters, MessageHandler, Updater
 from telegram.utils.helpers import effective_message_type
 
-from mastodon_telegram_bridge.filter import Filter, MastodonFilter, TelegramFilter
-from mastodon_telegram_bridge.footer import Footer, MastodonFooter, TelegramFooter
-from mastodon_telegram_bridge.types import (BridgeOptionsDict, MastodonOptionsDict, MastodonToTelegramOptions, MediaGroup,
-                                            TelegramOptionsDict, TelegramToMastodonOptions)
-from mastodon_telegram_bridge.utils import format_exception, markdownify
+from .filter import Filter, MastodonFilter, TelegramFilter
+from .footer import Footer, MastodonFooter, TelegramFooter
+from .typing import (BridgeOptionsDict, MastodonOptionsDict, MastodonToTelegramOptions,
+                     MediaGroup, TelegramOptionsDict, TelegramToMastodonOptions)
+from .utils import format_exception, markdownify
 
 
 logger = logging.getLogger(__name__)

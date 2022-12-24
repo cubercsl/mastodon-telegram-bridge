@@ -81,6 +81,7 @@ class Bridge:
                 for idx, media_id in enumerate(media_ids):
                     try:
                         _ = self.mastodon.media(media_id)
+                        logger.info('Media %s is ready', media_id)
                         ready[idx] = True
                     except MastodonAPIError as e:
                         if e.args[1] == 206:

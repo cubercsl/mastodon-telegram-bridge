@@ -25,7 +25,7 @@ dev = ["autopep8~=2.0"]
 homepage = "https://github.com/cubercsl/mastodon-telegram-bridge"
 
 [project.scripts]
-mastodon-telegram-bridge = "mastodon_telegram_bridge.main:main"
+mastodon-telegram-bridge = "mastodon_telegram_bridge.cli:main"
 
 [tool.autopep8]
 max_line_length = 127

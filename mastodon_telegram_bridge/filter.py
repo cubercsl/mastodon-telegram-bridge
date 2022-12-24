@@ -1,6 +1,9 @@
+import logging
 from typing import Any, Iterable
 
 from mastodon import AttribAccessDict
+
+logger = logging.getLogger(__name__)
 
 
 class Filter:
@@ -12,7 +15,8 @@ class Filter:
 
     Example:
         >>> class MyFilter(Filter):
-        ...     def __init__(self, *, pattern: str):
+        ...     def __init__(self, *, pattern: str, **kwargs: Any):
+        ...         super().__init__(**kwargs)
         ...         self.pattern = pattern
         ...     def __call__(self, message: str) -> bool:
         ...         return re.match(self.pattern, message)
@@ -27,8 +31,9 @@ class Filter:
         False
     """
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, **kwargs) -> None:
+        if kwargs:
+            logger.warning(f'Unused arguments: {kwargs}')
 
     def __call__(self, _: Any) -> bool:
         """Filter message, check if it should be forwarded
@@ -59,12 +64,13 @@ class Filter:
 
 class MastodonFilter(Filter):
 
-    def __init__(self, *, include: Iterable[str], exclude: Iterable[str]) -> None:
+    def __init__(self, *, include: Iterable[str], exclude: Iterable[str], **kwargs: Any) -> None:
+        super().__init__(**kwargs)
         self.include = include
         self.exclude = exclude
         self.__check_tags()
 
-    def __check_tags(self) -> None  :
+    def __check_tags(self) -> None:
         if not isinstance(self.include, Iterable):
             raise ValueError(f'include must be an iterable, got: {type(self.include)}')
         if not isinstance(self.exclude, Iterable):
@@ -90,7 +96,8 @@ class MastodonFilter(Filter):
 
 class TelegramFilter(Filter):
 
-    def __init__(self, *, scope: Iterable[str]) -> None:
+    def __init__(self, *, scope: Iterable[str],  **kwargs: Any) -> None:
+        super().__init__(**kwargs)
         self.scope = scope
         self.__check_scope()
 

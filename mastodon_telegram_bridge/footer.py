@@ -1,8 +1,10 @@
-
-from typing import Iterable, Optional
+import logging
+from typing import Any, Iterable, Optional
 
 from mastodon import AttribAccessDict
 from telegram import Message
+
+logger = logging.getLogger(__name__)
 
 
 class Footer:
@@ -23,8 +25,9 @@ class Footer:
         'This is a footer for 2\\nFrom bar\\nLink: https://example.com/2'
     """
 
-    def __init__(self, *args, **kwargs) -> None:
-        pass
+    def __init__(self, **kwargs) -> None:
+        if kwargs:
+            logger.warning(f'Unused arguments: {kwargs}')
 
     def _forwarded_from(self, name: str) -> str:
         return f'Forwarded from {name}'
@@ -41,7 +44,8 @@ class MastodonFooter(Footer):
     """Footer for mastodon statuses
     """
 
-    def __init__(self, *, add_link: bool, show_forward_from: bool):
+    def __init__(self, *, add_link: bool, show_forward_from: bool, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
         self.add_link = add_link
         self.show_forward_from = show_forward_from
 
@@ -83,7 +87,8 @@ class TelegramFooter(Footer):
     """Footer for telegram messages
     """
 
-    def __init__(self, *, add_link: bool, tags: Iterable[str]):
+    def __init__(self, *, add_link: bool, tags: Iterable[str], **kwargs: Any) -> None:
+        super().__init__(**kwargs)
         self.add_link = add_link
         self.tags = tags
         self.__check_tags()

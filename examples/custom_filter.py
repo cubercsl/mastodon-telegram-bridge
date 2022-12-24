@@ -5,11 +5,12 @@ from typing import Iterable
 
 from mastodon import AttribAccessDict
 
-from mastodon_telegram_bridge import Filter, custom_bridge
+from mastodon_telegram_bridge import Filter, main
 
 
 class ReblogFilter(Filter):
-    def __init__(self, *, scope: Iterable[str], rebloged_scope: Iterable[str]):
+    def __init__(self, *, scope: Iterable[str], rebloged_scope: Iterable[str], **kwargs: Any):
+        super().__init__(**kwargs)
         self.scope = scope
         self.rebloged_scope = rebloged_scope
 
@@ -23,4 +24,4 @@ class ReblogFilter(Filter):
 
 
 if __name__ == '__main__':
-    custom_bridge(telegram_filter=ReblogFilter)
+    main(telegram_filter=ReblogFilter)

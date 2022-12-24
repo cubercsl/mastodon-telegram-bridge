@@ -218,7 +218,7 @@ class Bridge:
         logger.warning('Update "%s" caused error "%s"', update, context.error)
         logger.exception(context.error)
 
-    def run(self, dry_run: bool) -> None:
+    def run(self, dry_run: bool = False) -> None:
         """Run the bridge.
         """
         # Mastodon stream

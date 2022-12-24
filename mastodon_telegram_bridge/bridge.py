@@ -1,9 +1,10 @@
 import logging
 import os
+import time
 from tempfile import TemporaryDirectory
 from typing import Type, cast
 
-from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon
+from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon, MastodonAPIError
 from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, ParseMode, Update, Video
 from telegram.ext import CallbackContext, CommandHandler, Filters, MessageHandler, Updater
 from telegram.utils.helpers import effective_message_type
@@ -72,6 +73,25 @@ class Bridge:
         self.telegram_footer = telegram_footer(**self.mastodon_to_telegram.footer)
 
     def _send_media_to_mastodon(self, *messages: Message, footer: str, context: CallbackContext) -> None:
+
+        def _wait_for_media_ready(media_ids: list[int]) -> None:
+            wait_time = 1
+            ready = [False for _ in media_ids]
+            for _ in range(5):
+                for idx, media_id in enumerate(media_ids):
+                    try:
+                        _ = self.mastodon.media(media_id)
+                        ready[idx] = True
+                    except MastodonAPIError as e:
+                        if e.args[1] == 206:
+                        # https://docs.joinmastodon.org/methods/media/#206-partial-content
+                            logger.info('Media %s is not ready, wait for %d seconds', media_id, wait_time)
+                if all(ready):
+                    return
+                time.sleep(wait_time)
+                wait_time *= 2
+            raise TimeoutError('Media is not ready after 5 retries')
+
         cfg = self.telegram_to_mastodon
         media_ids = []
         text = messages[0].caption or ''
@@ -93,6 +113,7 @@ class Bridge:
                 file_path = os.path.join(tmpdir, media_file.file_unique_id)
                 media_file.download(custom_path=file_path)
                 media_ids.append(self.mastodon.media_post(file_path).id)
+        _wait_for_media_ready(media_ids)
         status: AttribAccessDict = self.mastodon.status_post(text, visibility='public', media_ids=media_ids)
         success_message = f'*Successfully forward message to mastodon.*\n{status.url}'
         if messages[0].is_automatic_forward:

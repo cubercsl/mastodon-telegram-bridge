@@ -24,7 +24,7 @@ class TelegramMarkdownConverter(MarkdownConverter):
             text (str): text to escape
 
         Returns:
-            str: escaped text 
+            str: escaped text
         """
         if not text:
             return ''
@@ -60,4 +60,4 @@ def format_exception(exc: Exception) -> str:
     Returns:
         str: formatted exception
     """
-    return ''.join(ExceptionFormatter().format_exception(exc))
+    return ''.join(ExceptionFormatter().format_exception(type(exc), exc, exc.__traceback__))

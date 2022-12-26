@@ -205,7 +205,7 @@ class Bridge:
                         if status.reblog.visibility != 'public':
                             logger.warning('Cannot forward reblog link to telegram because the original message is not public.')
                             return
-                        text = self.telegram_footer(status.reblog)
+                        text = markdownify(self.telegram_footer(status.reblog))
                         logger.info('Sending message to telegram channel:\n %s', text)
                         self.bot.send_message(cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
                         return
@@ -214,7 +214,7 @@ class Bridge:
                 if status.spoiler_text:
                     text = f'*{status.spoiler_text}*\n\n{text}'
                 logger.info('Sending message to telegram channel: %s', text)
-                text += '\n' + self.telegram_footer(status)
+                text += '\n' + markdownify(self.telegram_footer(status))
                 if len(status.media_attachments) > 0:
                     medias: list[InputMediaPhoto | InputMediaVideo] = []
                     for item in status.media_attachments:
@@ -249,7 +249,7 @@ class Bridge:
             return
         if not self.mastodon_to_telegram.disable:
             listener = CallbackStreamListener(update_handler=self._send_message_to_telegram)
-            self.mastodon.stream_user(listener=listener, run_async=True)
+            self.mastodon.stream_user(listener=listener, run_async=True, reconnect_async=True)
         else:
             logger.warning('Skip mastodon stream, because mastodon to telegram is disabled.')
 

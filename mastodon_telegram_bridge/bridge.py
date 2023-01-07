@@ -250,7 +250,8 @@ class Bridge:
             logger.info('Skip running, because it is a dry run.')
             return
         if not self.mastodon_to_telegram.disable:
-            listener = CallbackStreamListener(update_handler=self._send_message_to_telegram)
+            update_handler = lambda status: asyncio.run(self._send_message_to_telegram(status))
+            listener = CallbackStreamListener(update_handler=update_handler)
             self.mastodon.stream_user(listener=listener, run_async=True, reconnect_async=True)
         else:
             logger.warning('Skip mastodon stream, because mastodon to telegram is disabled.')

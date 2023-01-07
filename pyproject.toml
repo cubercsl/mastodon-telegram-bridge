@@ -13,7 +13,7 @@ dependencies = [
     "betterlogging~=0.2",
     "Mastodon.py~=1.8",
     "markdownify~=0.11",
-    "python-telegram-bot~=13.15",
+    "python-telegram-bot~=20.0",
     "tomli~=2.0",
 ]
 dynamic = ["version"]

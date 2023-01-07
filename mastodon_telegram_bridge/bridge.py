@@ -1,13 +1,15 @@
+import asyncio
 import logging
 import os
-import time
 from tempfile import TemporaryDirectory
 from typing import Type, cast
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon, MastodonAPIError
-from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, ParseMode, Update, Video
-from telegram.ext import CallbackContext, CommandHandler, Filters, MessageHandler, Updater
-from telegram.utils.helpers import effective_message_type
+from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, Update, Video
+from telegram.constants import ParseMode
+from telegram.ext import Application, CallbackContext, CommandHandler, MessageHandler
+from telegram.ext.filters import UpdateType
+from telegram.helpers import effective_message_type
 
 from .filter import Filter, MastodonFilter, TelegramFilter
 from .footer import Footer, MastodonFooter, TelegramFooter
@@ -72,9 +74,9 @@ class Bridge:
         self.mastodon_footer = mastodon_footer(**self.telegram_to_mastodon.footer)
         self.telegram_footer = telegram_footer(**self.mastodon_to_telegram.footer)
 
-    def _send_media_to_mastodon(self, *messages: Message, footer: str, context: CallbackContext) -> None:
+    async def _send_media_to_mastodon(self, *messages: Message, footer: str, context: CallbackContext) -> None:
 
-        def _wait_for_media_ready(media_ids: list[int]) -> None:
+        async def _wait_for_media_ready(media_ids: list[int]) -> None:
             wait_time = 1
             ready = [False for _ in media_ids]
             for _ in range(5):
@@ -89,7 +91,7 @@ class Bridge:
                             logger.info('Media %s is not ready, wait for %d seconds', media_id, wait_time)
                 if all(ready):
                     return
-                time.sleep(wait_time)
+                await asyncio.sleep(wait_time)
                 wait_time *= 2
             raise TimeoutError('Media is not ready after 5 retries')
 
@@ -109,32 +111,32 @@ class Bridge:
                 if media_type not in ('photo', 'video'):
                     logger.warning('Unsupported media type: %s', media_type)
                     continue
-                media_file = message.photo[-1].get_file() \
-                    if media_type == 'photo' else cast(Video, message.effective_attachment).get_file()
+                media_file = await (message.photo[-1].get_file() \
+                    if media_type == 'photo' else cast(Video, message.effective_attachment).get_file())
                 file_path = os.path.join(tmpdir, media_file.file_unique_id)
-                media_file.download(custom_path=file_path)
+                await media_file.download_to_drive(custom_path=file_path)
                 media_ids.append(self.mastodon.media_post(file_path).id)
-        _wait_for_media_ready(media_ids)
+        await _wait_for_media_ready(media_ids)
         status: AttribAccessDict = self.mastodon.status_post(text, visibility='public', media_ids=media_ids)
         success_message = f'*Successfully forward message to mastodon.*\n{status.url}'
         if messages[0].is_automatic_forward:
-            messages[0].reply_markdown(success_message)
+            await messages[0].reply_markdown(success_message)
         else:
-            context.bot.send_message(cfg.pm_chat_id, success_message, parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(cfg.pm_chat_id, success_message, parse_mode=ParseMode.MARKDOWN)
 
-    def _media_group_sender(self, context: CallbackContext) -> None:
+    async def _media_group_sender(self, context: CallbackContext) -> None:
         cfg = self.telegram_to_mastodon
         try:
             if context.job is None:
                 logger.warning('No media group context.')
                 return
-            context.job.context = cast(MediaGroup, context.job.context)
-            self._send_media_to_mastodon(*context.job.context.message, footer=context.job.context.footer, context=context)
+            context.job.data = cast(MediaGroup, context.job.data)
+            await self._send_media_to_mastodon(*context.job.data.message, footer=context.job.data.footer, context=context)
         except Exception as exc:
             logger.exception(exc)
-            context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
 
-    def _send_message_to_mastodon(self, update: Update, context: CallbackContext) -> None:
+    async def _send_message_to_mastodon(self, update: Update, context: CallbackContext) -> None:
         message = update.effective_message
         if message is None:
             logger.warning('No effective message.')
@@ -142,7 +144,7 @@ class Bridge:
         cfg = self.telegram_to_mastodon
         if message.chat_id != cfg.channel_chat_id:
             logger.warning('Received message from wrong chat id: %d', message.chat_id)
-            message.reply_text('This bot is only for specific channel or chat.')
+            await message.reply_text('This bot is only for specific channel or chat.')
             return
         logger.info('Received channel message from chat id: %d', message.chat_id)
 
@@ -168,11 +170,11 @@ class Bridge:
                     else:
                         footer = self.mastodon_footer(message)
                         context.job_queue.run_once(self._media_group_sender, 5,
-                                                   context=(MediaGroup(message=[message], footer=footer)),
+                                                   data=MediaGroup(message=[message], footer=footer),
                                                    name=str(message.media_group_id))
                 else:
                     footer = self.mastodon_footer(message)
-                    self._send_media_to_mastodon(message, footer=footer, context=context)
+                    await self._send_media_to_mastodon(message, footer=footer, context=context)
             elif media_type == 'text':
                 text = message.text
                 if not self.mastodon_filter(text):
@@ -183,16 +185,16 @@ class Bridge:
                 status: AttribAccessDict = self.mastodon.status_post(status=text, visibility='public')
                 success_message = f'*Successfully forward message to mastodon.*\n{status.url}'
                 if message.is_automatic_forward:
-                    message.reply_markdown(success_message)
+                    await message.reply_markdown(success_message)
                 else:
-                    context.bot.send_message(cfg.pm_chat_id, success_message, parse_mode=ParseMode.MARKDOWN)
+                    await context.bot.send_message(cfg.pm_chat_id, success_message, parse_mode=ParseMode.MARKDOWN)
             else:
                 logger.info('Unsupported message type, skip it.')
         except Exception as exc:
             logger.exception(exc)
-            context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
 
-    def _send_message_to_telegram(self, status: AttribAccessDict) -> None:
+    async def _send_message_to_telegram(self, status: AttribAccessDict) -> None:
         cfg = self.mastodon_to_telegram
         try:
             if status.account.username == self._mastodon_username and \
@@ -207,7 +209,7 @@ class Bridge:
                             return
                         text = markdownify(self.telegram_footer(status.reblog))
                         logger.info('Sending message to telegram channel:\n %s', text)
-                        self.bot.send_message(cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
+                        await self.bot.send_message(cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
                         return
                     status = status.reblog
                 text = markdownify(status.content)
@@ -224,19 +226,19 @@ class Bridge:
                             medias.append(InputMediaVideo(item.url, parse_mode=ParseMode.MARKDOWN))
                     medias[0].caption = text
                     logger.info('Sending media group to telegram channel.')
-                    self.bot.send_media_group(cfg.channel_chat_id, medias)
+                    await self.bot.send_media_group(cfg.channel_chat_id, medias)
                 else:
                     logger.info('Sending pure-text message to telegram channel.')
-                    self.bot.send_message(cfg.channel_chat_id, text,
+                    await self.bot.send_message(cfg.channel_chat_id, text,
                                           parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
         except Exception as exc:
             logger.exception(exc)
-            self.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
+            await self.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
 
-    def _start(self, update: Update, _: CallbackContext) -> None:
-        update.message.reply_text('Hi!')
+    async def _start(self, update: Update, _: CallbackContext) -> None:
+        await update.message.reply_text('Hi!')
 
-    def _error(self, update: object, context: CallbackContext) -> None:
+    async def _error(self, update: object, context: CallbackContext) -> None:
         logger.warning('Update "%s" caused error "%s"', update, context.error)
         logger.exception(context.error)
 
@@ -254,13 +256,11 @@ class Bridge:
             logger.warning('Skip mastodon stream, because mastodon to telegram is disabled.')
 
         # Telegram bot
-        updater = Updater(bot=self.bot, use_context=True)
-        dispatcher = updater.dispatcher
-        dispatcher.add_error_handler(self._error)
-        dispatcher.add_handler(CommandHandler('start', self._start))
+        app = Application.builder().bot(self.bot).build()
+        app.add_error_handler(self._error)
+        app.add_handler(CommandHandler('start', self._start))
         if not self.telegram_to_mastodon.disable:
-            dispatcher.add_handler(MessageHandler(Filters.update.channel_post, self._send_message_to_mastodon))
+            app.add_handler(MessageHandler(UpdateType.CHANNEL_POST, self._send_message_to_mastodon))
         else:
             logger.warning('Skip telegram message handler, because telegram to mastodon is disabled.')
-        updater.start_polling()
-        updater.idle()
+        app.run_polling()

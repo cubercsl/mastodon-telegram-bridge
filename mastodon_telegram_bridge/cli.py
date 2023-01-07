@@ -10,6 +10,8 @@ from .filter import Filter
 from .footer import Footer
 from .typing import ConfigDict
 
+@overload
+def main() -> None: ...
 
 @overload
 def main(*, mastodon_filter: Type[Filter]) -> None: ...

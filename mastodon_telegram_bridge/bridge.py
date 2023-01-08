@@ -101,7 +101,7 @@ class Bridge:
         if not self.mastodon_filter(text):
             logger.info('Do not forward this channel message to mastodon.')
             return
-        text += '\n' + footer
+        text += f'\n\n{footer}'
         if cnt := len(messages) > 4:
             logger.warning('Too many medias: %d, it may not be supported by mastodon', cnt)
             return
@@ -180,7 +180,7 @@ class Bridge:
                     logger.info('Do not forward this channel message to mastodon.')
                     return
                 footer = self.mastodon_footer(message)
-                text += '\n' + footer
+                text += f'\n\n{footer}'
                 status: AttribAccessDict = self.mastodon.status_post(status=text, visibility='public')
                 success_message = f'*Successfully forward message to mastodon.*\n{status.url}'
                 if message.is_automatic_forward:
@@ -249,7 +249,7 @@ class Bridge:
             logger.info('Skip running, because it is a dry run.')
             return
         if not self.mastodon_to_telegram.disable:
-            def update_handler(status): return asyncio.run(self._send_message_to_telegram(status))
+            def update_handler(status: AttribAccessDict): return asyncio.run(self._send_message_to_telegram(status))
             listener = CallbackStreamListener(update_handler=update_handler)
             self.mastodon.stream_user(listener=listener, run_async=True, reconnect_async=True)
         else:

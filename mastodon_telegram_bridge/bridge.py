@@ -51,8 +51,8 @@ class Bridge:
         """
         # you can add more arguments in [mastodon] section in config.toml to customize the mastodon client
         self.mastodon = Mastodon(**mastodon)
-        # you can add more arguments in [telegram] section in config.toml to customize the telegram bot
-        self.bot = Bot(**telegram)
+        # TODO: add more arguments in [telegram] section in config.toml to customize the telegram bot
+        self.telegram = Application.builder().token(telegram['token']).pool_timeout(10).build()
 
         self._mastodon_username: str = self.mastodon.me().username
         self._mastodon_app_name: str = self.mastodon.app_verify_credentials().name
@@ -87,7 +87,7 @@ class Bridge:
                         ready[idx] = True
                     except MastodonAPIError as e:
                         if e.args[1] == 206:
-                        # https://docs.joinmastodon.org/methods/media/#206-partial-content
+                            # https://docs.joinmastodon.org/methods/media/#206-partial-content
                             logger.info('Media %s is not ready, wait for %d seconds', media_id, wait_time)
                 if all(ready):
                     return
@@ -111,8 +111,7 @@ class Bridge:
                 if media_type not in ('photo', 'video'):
                     logger.warning('Unsupported media type: %s', media_type)
                     continue
-                media_file = await (message.photo[-1].get_file() \
-                    if media_type == 'photo' else cast(Video, message.effective_attachment).get_file())
+                media_file = await (message.photo[-1] if media_type == 'photo' else cast(Video, message.effective_attachment)).get_file()
                 file_path = os.path.join(tmpdir, media_file.file_unique_id)
                 await media_file.download_to_drive(custom_path=file_path)
                 media_ids.append(self.mastodon.media_post(file_path).id)
@@ -209,7 +208,7 @@ class Bridge:
                             return
                         text = markdownify(self.telegram_footer(status.reblog))
                         logger.info('Sending message to telegram channel:\n %s', text)
-                        await self.bot.send_message(cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
+                        await self.telegram.bot.send_message(cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
                         return
                     status = status.reblog
                 text = markdownify(status.content)
@@ -226,14 +225,14 @@ class Bridge:
                             medias.append(InputMediaVideo(item.url, parse_mode=ParseMode.MARKDOWN))
                     medias[0].caption = text
                     logger.info('Sending media group to telegram channel.')
-                    await self.bot.send_media_group(cfg.channel_chat_id, medias)
+                    await self.telegram.bot.send_media_group(cfg.channel_chat_id, medias)
                 else:
                     logger.info('Sending pure-text message to telegram channel.')
-                    await self.bot.send_message(cfg.channel_chat_id, text,
-                                          parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+                    await self.telegram.bot.send_message(cfg.channel_chat_id, text,
+                                                         parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
         except Exception as exc:
             logger.exception(exc)
-            await self.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
+            await self.telegram.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
 
     async def _start(self, update: Update, _: CallbackContext) -> None:
         await update.message.reply_text('Hi!')
@@ -250,14 +249,14 @@ class Bridge:
             logger.info('Skip running, because it is a dry run.')
             return
         if not self.mastodon_to_telegram.disable:
-            update_handler = lambda status: asyncio.run(self._send_message_to_telegram(status))
+            def update_handler(status): return asyncio.run(self._send_message_to_telegram(status))
             listener = CallbackStreamListener(update_handler=update_handler)
             self.mastodon.stream_user(listener=listener, run_async=True, reconnect_async=True)
         else:
             logger.warning('Skip mastodon stream, because mastodon to telegram is disabled.')
 
         # Telegram bot
-        app = Application.builder().bot(self.bot).build()
+        app = self.telegram
         app.add_error_handler(self._error)
         app.add_handler(CommandHandler('start', self._start))
         if not self.telegram_to_mastodon.disable:

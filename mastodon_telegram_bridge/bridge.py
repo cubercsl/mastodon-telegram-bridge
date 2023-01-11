@@ -5,9 +5,9 @@ from tempfile import TemporaryDirectory
 from typing import Type, cast
 
 from mastodon import AttribAccessDict, CallbackStreamListener, Mastodon, MastodonAPIError
-from telegram import Bot, InputMediaPhoto, InputMediaVideo, Message, Update, Video
+from telegram import InputMediaPhoto, InputMediaVideo, Message, Update, Video
 from telegram.constants import ParseMode
-from telegram.ext import Application, CallbackContext, CommandHandler, MessageHandler
+from telegram.ext import Application, CallbackContext, CommandHandler, MessageHandler, TypeHandler
 from telegram.ext.filters import UpdateType
 from telegram.helpers import effective_message_type
 
@@ -52,7 +52,7 @@ class Bridge:
         # you can add more arguments in [mastodon] section in config.toml to customize the mastodon client
         self.mastodon = Mastodon(**mastodon)
         # TODO: add more arguments in [telegram] section in config.toml to customize the telegram bot
-        self.telegram = Application.builder().token(telegram['token']).pool_timeout(10).build()
+        self.telegram = Application.builder().token(telegram['token']).build()
 
         self._mastodon_username: str = self.mastodon.me().username
         self._mastodon_app_name: str = self.mastodon.app_verify_credentials().name
@@ -193,7 +193,7 @@ class Bridge:
             logger.exception(exc)
             await context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
 
-    async def _send_message_to_telegram(self, status: AttribAccessDict) -> None:
+    async def _send_message_to_telegram(self, status: AttribAccessDict, context: CallbackContext) -> None:
         cfg = self.mastodon_to_telegram
         try:
             if status.account.username == self._mastodon_username and \
@@ -208,7 +208,7 @@ class Bridge:
                             return
                         text = markdownify(self.telegram_footer(status.reblog))
                         logger.info('Sending message to telegram channel:\n %s', text)
-                        await self.telegram.bot.send_message(cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
+                        await context.bot.send_message(cfg.channel_chat_id, text, parse_mode=ParseMode.MARKDOWN)
                         return
                     status = status.reblog
                 text = markdownify(status.content)
@@ -225,14 +225,14 @@ class Bridge:
                             medias.append(InputMediaVideo(item.url, parse_mode=ParseMode.MARKDOWN))
                     medias[0].caption = text
                     logger.info('Sending media group to telegram channel.')
-                    await self.telegram.bot.send_media_group(cfg.channel_chat_id, medias)
+                    await context.bot.send_media_group(cfg.channel_chat_id, medias)
                 else:
                     logger.info('Sending pure-text message to telegram channel.')
-                    await self.telegram.bot.send_message(cfg.channel_chat_id, text,
+                    await context.bot.send_message(cfg.channel_chat_id, text,
                                                          parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
         except Exception as exc:
             logger.exception(exc)
-            await self.telegram.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(cfg.pm_chat_id, f'```\n{format_exception(exc)}\n```', parse_mode=ParseMode.MARKDOWN)
 
     async def _start(self, update: Update, _: CallbackContext) -> None:
         await update.message.reply_text('Hi!')
@@ -244,19 +244,21 @@ class Bridge:
     def run(self, dry_run: bool = False) -> None:
         """Run the bridge.
         """
+        # Telegram bot
+        app = self.telegram
+
         # Mastodon stream
         if dry_run:
             logger.info('Skip running, because it is a dry run.')
             return
         if not self.mastodon_to_telegram.disable:
-            def update_handler(status: AttribAccessDict): return asyncio.run(self._send_message_to_telegram(status))
+            def update_handler(status: AttribAccessDict): return asyncio.run(app.update_queue.put(status))
             listener = CallbackStreamListener(update_handler=update_handler)
+            app.add_handler(TypeHandler(AttribAccessDict, self._send_message_to_telegram))
             self.mastodon.stream_user(listener=listener, run_async=True, reconnect_async=True)
         else:
             logger.warning('Skip mastodon stream, because mastodon to telegram is disabled.')
 
-        # Telegram bot
-        app = self.telegram
         app.add_error_handler(self._error)
         app.add_handler(CommandHandler('start', self._start))
         if not self.telegram_to_mastodon.disable:

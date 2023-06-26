@@ -165,7 +165,7 @@ class Bridge:
                         return
                     jobs = context.job_queue.get_jobs_by_name(str(message.media_group_id))
                     if jobs:
-                        cast(MediaGroup, jobs[0].context).message.append(message)
+                        cast(MediaGroup, jobs[0].data).message.append(message)
                     else:
                         footer = self.mastodon_footer(message)
                         context.job_queue.run_once(self._media_group_sender, 5,
